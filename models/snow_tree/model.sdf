@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<sdf version="1.8">
+  <model name="snow_tree">
+    <static>true</static>
+    <link name="trunk">
+      <!-- The source mesh is 1 m tall; scale it to a 6 m forest tree. -->
+      <visual name="snow_tree_visual">
+        <cast_shadows>false</cast_shadows>
+        <geometry>
+          <mesh>
+            <uri>model://snow_tree/meshes/snow_tree.obj</uri>
+            <scale>6 6 6</scale>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>0.9 0.9 0.9 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+        </material>
+      </visual>
+
+      <!-- Simple collision avoids expensive mesh-on-mesh contacts. -->
+      <collision name="trunk_collision">
+        <pose>0 0 0.9 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.28</radius>
+            <length>1.8</length>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.8</mu>
+              <mu2>0.8</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+    </link>
+  </model>
+</sdf>

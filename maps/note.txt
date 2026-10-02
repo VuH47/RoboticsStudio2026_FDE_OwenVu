@@ -1,0 +1,15 @@
+Saving map command
++ Parrot 
+ros2 launch 41068_ignition_bringup 41068_ignition_parrot.launch.py world:=snow_forest slam:=true rviz:=true nav2:=true rabbits:=false
+
+ros2 run 41068_ignition_bringup parrot_teleop.py
+
+ ros2 run nav2_map_server map_saver_cli -t /parrot1/map -f ~/41068_ws/src/41068_ignition_bringup/maps/parrot1_map --modetrinary
+
++Husky 
+
+ros2 launch 41068_ignition_bringup 41068_ignition_husky.launch.py world:=snow_forest slam:=true rviz:=true nav2:=true rabbits:=false
+
+ ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros- args -r cmd_vel:=/husky1/cmd_vel
+
+ ros2 run nav2_map_server map_saver_cli -t /parrot1/map -f ~/41068_ws/src/41068_ignition_bringup/maps/**youmapname** --modetrinary

@@ -1,0 +1,8 @@
+# snow_ramp snow material
+newmtl snow
+Ka 0.90 0.92 0.95
+Kd 0.95 0.97 1.00
+Ks 0.15 0.15 0.15
+Ns 10
+d 1.0
+illum 2

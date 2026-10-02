@@ -1,0 +1,55 @@
+<?xml version="1.0" ?>
+<!--
+  snow_rabbit — winter hare with sensor-visible collision.
+  Origin at paws, facing +X. Static so a hopper node can set_pose hops
+  without fighting physics; gpu_lidar still hits the collision volumes.
+  Ear/head volume tops out above scan_ground_filter max_ground_height (0.35 m)
+  so Husky/Parrot treat the animal as an obstacle, not snow.
+-->
+<sdf version="1.8">
+  <model name="snow_rabbit">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <cast_shadows>false</cast_shadows>
+        <geometry>
+          <mesh>
+            <uri>model://snow_rabbit/meshes/snow_rabbit.obj</uri>
+            <scale>1.5 1.5 1.5</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <!-- Torso / haunches -->
+      <collision name="body">
+        <pose>0.06 0 0.20 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.55 0.28 0.38</size>
+          </box>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.8</mu>
+              <mu2>0.8</mu2>
+            </ode>
+          </friction>
+          <contact>
+            <ode>
+              <max_vel>0.5</max_vel>
+            </ode>
+          </contact>
+        </surface>
+      </collision>
+      <!-- Head + ears: top ≈ 0.52 m so lidar is above the ground filter. -->
+      <collision name="head_ears">
+        <pose>0.26 0 0.42 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.16 0.18 0.22</size>
+          </box>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

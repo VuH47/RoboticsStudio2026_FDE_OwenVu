@@ -1,0 +1,232 @@
+<?xml version="1.0" ?>
+<!--
+  alpine_trail v3.1  —  steel ski-lift baseline for RGB ice-defect tests
+
+  FRAME
+    PRE-INCLINED ground z = tan(0.07)*x
+    Include pose 20 -30 0 0 0 0
+      world x = 20 + model_x
+      world y = -30 + model_y
+    Span model x 3.0 → 58.5  = world x 23.0 → 78.5
+
+  CABLES
+    Twin steel/dark tubes, diameter 0.34 m (8-sided) + steel core.
+    Dark steel visual baseline so later pale-blue ice_block models contrast in RGB.
+    Ice accretion is a SEPARATE ice_block model, not this mesh.
+    Height above ramp ≈ 6.50 m (sag ≤ 0.35 m).
+    Downhill cable z ≈ 6.50 m
+    Summit cable z ≈ 10.60 m
+    Cable collision: cheap cylinders on each span (0.70 * chord, r=0.17),
+    not mesh. Ice sleeves have their own collision.
+
+  SPANS
+    Named cable test area: models/alpine_trail/SPANS.md
+    Pose helper: scripts/ice_cable_geometry.py  (span_id, cable_id, t)
+
+  DRIVE LANE
+    World |y| < 12 stays clear. Line is at world y ≈ -30.
+-->
+<!--
+  Husky RGB inspect (corridor y=0, face −Y):
+    ros2 launch 41068_ignition_bringup 41068_ignition_husky.launch.py world:=snow_forest slam:=true nav2:=true rviz:=true
+    ros2 launch 41068_ignition_bringup ice_scenario.launch.py
+    ros2 launch 41068_ignition_bringup husky_ice_inspect.launch.py
+  Topic: /husky1/camera/image   Calibration: /husky1/camera/camera_info
+  Ground truth file (not a detector topic): ~/.ros/ice_ground_truth.json
+-->
+<sdf version="1.8">
+  <model name="alpine_trail">
+    <static>true</static>
+    <link name="link">
+      <visual name="cables">
+        <cast_shadows>false</cast_shadows>
+        <geometry>
+          <mesh>
+            <uri>model://alpine_trail/meshes/cables.obj</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.22 0.23 0.25 1</ambient>
+          <diffuse>0.32 0.33 0.35 1</diffuse>
+          <specular>0.12 0.12 0.12 1</specular>
+        </material>
+      </visual>
+      <visual name="structure">
+        <cast_shadows>false</cast_shadows>
+        <geometry>
+          <mesh>
+            <uri>model://alpine_trail/meshes/structure.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="tower_0_foot">
+        <pose>8.000 0.000 0.701 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>1.300 1.300 0.360</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="tower_0_shaft">
+        <pose>8.000 0.000 4.196 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>0.500 0.500 6.630</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="tower_1_foot">
+        <pose>24.000 0.000 1.823 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>1.300 1.300 0.360</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="tower_1_shaft">
+        <pose>24.000 0.000 5.318 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>0.500 0.500 6.630</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="tower_2_foot">
+        <pose>40.000 0.000 2.945 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>1.300 1.300 0.360</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="tower_2_shaft">
+        <pose>40.000 0.000 6.440 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>0.500 0.500 6.630</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="tower_3_foot">
+        <pose>54.000 0.000 3.926 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>1.300 1.300 0.360</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="tower_3_shaft">
+        <pose>54.000 0.000 7.421 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>0.500 0.500 6.630</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="cabin_0">
+        <pose>18.000 0.000 5.559 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>1.200 0.900 1.250</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="cabin_1">
+        <pose>46.000 0.000 7.507 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>1.200 0.900 1.250</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="base_shed">
+        <pose>5.000 -2.400 1.651 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>3.600 2.800 2.600</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="base_platform">
+        <pose>5.000 -1.650 0.431 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>3.900 5.100 0.160</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="summit_shed">
+        <pose>57.500 -2.400 5.332 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>3.600 2.800 2.600</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="summit_platform">
+        <pose>57.500 -1.650 4.112 0.00000 0.00000 0.00000</pose>
+        <geometry>
+          <box>
+            <size>3.900 5.100 0.160</size>
+          </box>
+        </geometry>
+      </collision>
+      <!-- Cable centreline cylinders (model frame). Length 70% of chord so
+           they stay off tower heads. Axis is +Z, rotated onto the cable. -->
+      <collision name="cable_left_span_01">
+        <pose>16.0000 -0.7500 7.2785 0 1.646588 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.17</radius>
+            <length>11.232</length>
+          </cylinder>
+        </geometry>
+      </collision>
+      <collision name="cable_right_span_01">
+        <pose>16.0000 0.7500 7.2785 0 1.646588 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.17</radius>
+            <length>11.232</length>
+          </cylinder>
+        </geometry>
+      </collision>
+      <collision name="cable_left_span_02">
+        <pose>32.0000 -0.7500 8.4010 0 1.642672 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.17</radius>
+            <length>11.229</length>
+          </cylinder>
+        </geometry>
+      </collision>
+      <collision name="cable_right_span_02">
+        <pose>32.0000 0.7500 8.4010 0 1.642672 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.17</radius>
+            <length>11.229</length>
+          </cylinder>
+        </geometry>
+      </collision>
+      <collision name="cable_left_span_03">
+        <pose>47.0000 -0.7500 9.4465 0 1.639331 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.17</radius>
+            <length>9.823</length>
+          </cylinder>
+        </geometry>
+      </collision>
+      <collision name="cable_right_span_03">
+        <pose>47.0000 0.7500 9.4465 0 1.639331 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.17</radius>
+            <length>9.823</length>
+          </cylinder>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

@@ -1,0 +1,21 @@
+# Dark steel baseline; ice group uses steel colours (ice_block is a separate model).
+newmtl ice
+Ns 24.0
+Ka 0.220000 0.230000 0.250000
+Kd 0.320000 0.330000 0.350000
+Ks 0.120000 0.120000 0.120000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+
+newmtl steel
+Ns 24.0
+Ka 0.200000 0.220000 0.240000
+Kd 0.320000 0.330000 0.350000
+Ks 0.120000 0.120000 0.120000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+

@@ -1,0 +1,36 @@
+<?xml version="1.0" ?>
+<sdf version="1.8">
+  <model name="deploy_station">
+    <static>true</static>
+    <pose>0 0 0 0 0 0</pose>
+    <!-- Size vs original: width (Y) x2 and length/depth (X) x2.
+         Open entrance remains on +X. Height (Z) unchanged. -->
+    <link name="link">
+      <collision name="wall_left_collision">
+        <pose>0 3.8 1.43 0 0 0</pose>
+        <geometry><box><size>12.0 0.2 2.86</size></box></geometry>
+      </collision>
+      <collision name="wall_right_collision">
+        <pose>0 -3.8 1.43 0 0 0</pose>
+        <geometry><box><size>12.0 0.2 2.86</size></box></geometry>
+      </collision>
+      <collision name="wall_back_collision">
+        <pose>-5.9 0 1.43 0 0 0</pose>
+        <geometry><box><size>0.2 7.2 2.86</size></box></geometry>
+      </collision>
+      <collision name="roof_collision">
+        <pose>0 0 2.76 0 0 0</pose>
+        <geometry><box><size>12.0 8.0 0.2</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <cast_shadows>false</cast_shadows>
+        <geometry>
+          <mesh>
+            <uri>model://deploy_station/meshes/deploy_station.obj</uri>
+            <scale>2 2 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+  </model>
+</sdf>

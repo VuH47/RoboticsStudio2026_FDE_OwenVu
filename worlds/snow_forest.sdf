@@ -1,0 +1,414 @@
+<?xml version="1.0"?>
+<sdf version="1.8">
+  <world name="snow_forest">
+    <gravity>0 0 -9.81</gravity>
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+    <atmosphere type="adiabatic"/>
+
+    <physics name="default_physics" type="ignored">
+      <max_step_size>0.01</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>100</real_time_update_rate>
+    </physics>
+
+    <!-- Trimmed snow world (Aug 2026): length ends near snow_tree_RR4 (x≈75).
+         Ramp entry x=20, summit x≈80. Width Y ±55 unchanged. Alpine removed. -->
+
+    <scene>
+      <ambient>0.75 0.78 0.82</ambient>
+      <background>0.78 0.84 0.9</background>
+      <shadows>false</shadows>
+    </scene>
+
+    <light name="winter_sun" type="directional">
+      <cast_shadows>false</cast_shadows>
+      <pose>0 0 20 0 0 0</pose>
+      <diffuse>0.88 0.9 0.95 1</diffuse>
+      <specular>0.18 0.18 0.2 1</specular>
+      <direction>-0.45 0.2 -0.87</direction>
+    </light>
+
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <latitude_deg>0</latitude_deg>
+      <longitude_deg>0</longitude_deg>
+      <elevation>10</elevation>
+      <heading_deg>0</heading_deg>
+    </spherical_coordinates>
+
+    <include>
+      <uri>model://snow_ground</uri>
+      <name>snow_ground</name>
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+
+    <!-- Perimeter walls. Ground is x -30..90, y -55..55.
+         Panels are 10 m by 8 m, centered at z=4 (top at z=8, above the ramp summit).
+         Shifted 0.1 m outside the edge so the box does not cut the ramp sides.
+         Roll pi/2 stands the plane up. East/west yaw +/- pi/2 runs the long edge along Y. -->
+    <include><uri>model://snow_wall</uri><name>snow_wall_N01</name><pose>-25 55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_N02</name><pose>-15 55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_N03</name><pose>-5 55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_N04</name><pose>5 55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_N05</name><pose>15 55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_N06</name><pose>25 55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_N07</name><pose>35 55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_N08</name><pose>45 55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_N09</name><pose>55 55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_N10</name><pose>65 55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_N11</name><pose>75 55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_N12</name><pose>85 55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_S01</name><pose>-25 -55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_S02</name><pose>-15 -55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_S03</name><pose>-5 -55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_S04</name><pose>5 -55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_S05</name><pose>15 -55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_S06</name><pose>25 -55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_S07</name><pose>35 -55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_S08</name><pose>45 -55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_S09</name><pose>55 -55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_S10</name><pose>65 -55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_S11</name><pose>75 -55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_S12</name><pose>85 -55.1 4 1.570796 0 0</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_E01</name><pose>90.1 -50 4 1.570796 0 -1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_E02</name><pose>90.1 -40 4 1.570796 0 -1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_E03</name><pose>90.1 -30 4 1.570796 0 -1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_E04</name><pose>90.1 -20 4 1.570796 0 -1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_E05</name><pose>90.1 -10 4 1.570796 0 -1.570796</pose></include>
+    <include><uri>model://snow_wall_end</uri><name>snow_wall_E06</name><pose>90.1 0 4 1.570796 0 -1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_E07</name><pose>90.1 10 4 1.570796 0 -1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_E08</name><pose>90.1 20 4 1.570796 0 -1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_E09</name><pose>90.1 30 4 1.570796 0 -1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_E10</name><pose>90.1 40 4 1.570796 0 -1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_E11</name><pose>90.1 50 4 1.570796 0 -1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_W01</name><pose>-30.1 -50 4 1.570796 0 1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_W02</name><pose>-30.1 -40 4 1.570796 0 1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_W03</name><pose>-30.1 -30 4 1.570796 0 1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_W04</name><pose>-30.1 -20 4 1.570796 0 1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_W05</name><pose>-30.1 -10 4 1.570796 0 1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_W06</name><pose>-30.1 0 4 1.570796 0 1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_W07</name><pose>-30.1 10 4 1.570796 0 1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_W08</name><pose>-30.1 20 4 1.570796 0 1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_W09</name><pose>-30.1 30 4 1.570796 0 1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_W10</name><pose>-30.1 40 4 1.570796 0 1.570796</pose></include>
+    <include><uri>model://snow_wall</uri><name>snow_wall_W11</name><pose>-30.1 50 4 1.570796 0 1.570796</pose></include>
+
+    <!-- ========== TREE BELT (U-shape, ends at RR4/RL4) ==========
+         Keep |y| < 12 m clear for ski / Nav2 corridor.
+    -->
+    <!-- Flat plane — left arm start -->
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_FL1</name>
+      <pose>2.0 28.0 0.00 0 0 0.40</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_FL2</name>
+      <pose>8.0 38.0 0.00 0 0 1.10</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_FL3</name>
+      <pose>14.0 32.0 0.00 0 0 -0.60</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_FL4</name>
+      <pose>18.0 45.0 0.00 0 0 2.00</pose>
+    </include>
+    <!-- Flat plane — right arm start -->
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_FR1</name>
+      <pose>2.0 -32.0 0.00 0 0 0.30</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_FR2</name>
+      <pose>8.0 -42.0 0.00 0 0 -1.20</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_FR3</name>
+      <pose>14.0 -36.0 0.00 0 0 0.80</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_FR4</name>
+      <pose>18.0 -48.0 0.00 0 0 2.20</pose>
+    </include>
+    <!-- Ramp left arm (+Y) up to RL4 -->
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_RL1</name>
+      <pose>30.0 24.0 0.70 0 0 0.50</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_RL2</name>
+      <pose>45.0 34.0 1.75 0 0 1.30</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_RL3</name>
+      <pose>60.0 26.0 2.80 0 0 -0.40</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_RL4</name>
+      <pose>75.0 40.0 3.86 0 0 0.90</pose>
+    </include>
+    <!-- Ramp right arm (-Y) up to RR4 -->
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_RR1</name>
+      <pose>30.0 -34.0 0.70 0 0 0.20</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_RR2</name>
+      <pose>45.0 -44.0 1.75 0 0 -1.10</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_RR3</name>
+      <pose>60.0 -36.0 2.80 0 0 0.70</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_RR4</name>
+      <pose>75.0 -48.0 3.86 0 0 1.40</pose>
+    </include>
+    <!-- Small summit backdrop at ramp end (x≈80), |y|>=18 so corridor stays clear -->
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_T1</name>
+      <pose>80.0 22.0 4.21 0 0 0.40</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>snow_tree_T2</name>
+      <pose>80.0 -22.0 4.21 0 0 1.20</pose>
+    </include>
+
+    <!-- SLAM landmarks near Husky spawn (0,0). Without these, lidar latches onto
+         alpine trees at |y|≈30–48 and builds a thin strip with origin ~y=-36;
+         spawn sits on the map edge → "Robot is out of bounds" (ISSUE 3 / 19).
+         Keep |y| small enough to see from spawn; stay outside ski centreline. -->
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>slam_tree_spawn_NW</name>
+      <!-- Outer +Y from deploy pad (-8,0); was (-3,5) — too tight on house. -->
+      <pose>-4.0 9.0 0.00 0 0 0.20</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>slam_tree_spawn_SW</name>
+      <!-- Outer -Y from deploy pad; was (-3,-5). -->
+      <pose>-4.0 -9.0 0.00 0 0 -0.40</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>slam_tree_spawn_NE</name>
+      <pose>6.0 8.0 0.00 0 0 0.80</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>slam_tree_spawn_SE</name>
+      <pose>6.0 -8.0 0.00 0 0 1.10</pose>
+    </include>
+    <!-- slam_tree_spawn_E (10,0) removed: sat on corridor +x and blocked
+         Nav2 to span01_approach with inflation (ISSUE 20). -->
+
+    <!-- SLAM landmarks just before ramp entry -->
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>slam_tree_ramp_L</name>
+      <pose>14.0 14.0 0.00 0 0 0.50</pose>
+    </include>
+    <include>
+      <uri>model://snow_tree</uri>
+      <name>slam_tree_ramp_R</name>
+      <pose>14.0 -14.0 0.00 0 0 1.20</pose>
+    </include>
+
+    <!-- 4° ramp: entry x=20, summit x≈80 -->
+    <include>
+      <uri>model://snow_ramp</uri>
+      <name>snow_ramp_01</name>
+      <pose>20 0 0 0 0 0</pose>
+    </include>
+
+    <!-- Thick icy alpine cableway (v3) — designed include pose 20 -30 0.
+         Cables clear of Nav2 corridor |y|<12; span world x ≈ 23..78.5 -->
+    <include>
+      <uri>model://alpine_trail</uri>
+      <name>alpine_trail</name>
+      <pose>20 -30 0 0 0 0</pose>
+    </include>
+
+    <!-- Deploy station on corridor centreline (y=0), between spawn NW/SW
+         trees in Y. x=-8 keeps the ~12×8 m footprint west of spawn (0,0)
+         so Husky is not born inside the pad (ISSUE 20). Was (-18, 10). -->
+    <include>
+      <uri>model://deploy_station</uri>
+      <name>deploy_station</name>
+      <pose>-8 0 0 0 0 0</pose>
+    </include>
+
+    <!-- ========== SNOW PROPS (soft obstacles) ==========
+         Keep |y| < 12 clear for Nav2 corridor.
+         Ramp z ≈ (x - 20) * tan(4°). Bushes sit 5 cm into the snow.
+         Left (+Y): rocks along the inner tree line.
+         Right (−Y): inner-strip bushes, plus a rock/bush cluster around RR1/RR2.
+    -->
+    <include>
+      <uri>model://snow_rock_large</uri>
+      <name>prop_rock_L_flat</name>
+      <pose>10.0 16.0 0.00 0 0 0.40</pose>
+    </include>
+    <include>
+      <uri>model://snow_bush_large</uri>
+      <name>prop_bush_R_flat</name>
+      <pose>12.0 -16.0 -0.05 0 0 -0.50</pose>
+    </include>
+    <include>
+      <uri>model://snow_bush_small</uri>
+      <name>prop_bush_L_flat</name>
+      <pose>8.0 22.0 -0.05 0 0 1.10</pose>
+    </include>
+    <include>
+      <uri>model://snow_rock_small</uri>
+      <name>prop_rock_L_pre</name>
+      <pose>6.0 18.0 0.00 0 0 1.00</pose>
+    </include>
+    <include>
+      <uri>model://snow_bush_small</uri>
+      <name>prop_bush_R_pre</name>
+      <pose>16.0 -18.0 -0.05 0 0 0.80</pose>
+    </include>
+    <include>
+      <uri>model://snow_rock_large</uri>
+      <name>prop_rock_L_ramp</name>
+      <pose>35.0 18.0 1.05 0 0 0.30</pose>
+    </include>
+    <include>
+      <uri>model://snow_bush_large</uri>
+      <name>prop_bush_R_ramp</name>
+      <pose>40.0 -18.0 1.35 0 0 -0.70</pose>
+    </include>
+    <include>
+      <uri>model://snow_bush_large</uri>
+      <name>prop_bush_L_ramp</name>
+      <pose>32.0 22.0 0.79 0 0 0.40</pose>
+    </include>
+    <include>
+      <uri>model://snow_rock_small</uri>
+      <name>prop_rock_L_mid</name>
+      <pose>55.0 20.0 2.45 0 0 1.20</pose>
+    </include>
+    <include>
+      <uri>model://snow_bush_small</uri>
+      <name>prop_bush_R_mid</name>
+      <pose>55.0 -20.0 2.40 0 0 -1.00</pose>
+    </include>
+    <include>
+      <uri>model://snow_rock_small</uri>
+      <name>prop_rock_L_upper</name>
+      <pose>70.0 18.0 3.50 0 0 0.60</pose>
+    </include>
+    <include>
+      <uri>model://snow_bush_large</uri>
+      <name>prop_bush_R_upper</name>
+      <pose>65.0 -22.0 3.10 0 0 0.20</pose>
+    </include>
+    <include>
+      <uri>model://snow_bush_small</uri>
+      <name>prop_bush_L_upper</name>
+      <pose>68.0 24.0 3.32 0 0 -0.80</pose>
+    </include>
+
+    <!-- Right tree belt: rocks + extra bushes around / just past RR1 (30,-34)
+         and RR2 (45,-44). Stay outside alpine (world y≈-30) and |y|<12 corridor. -->
+    <include>
+      <uri>model://snow_rock_large</uri>
+      <name>prop_rock_R_rr1a</name>
+      <pose>33.5 -38.5 0.95 0 0 1.40</pose>
+    </include>
+    <include>
+      <uri>model://snow_rock_small</uri>
+      <name>prop_rock_R_rr1b</name>
+      <pose>27.8 -40.2 0.55 0 0 -0.60</pose>
+    </include>
+    <include>
+      <uri>model://snow_bush_small</uri>
+      <name>prop_bush_R_rr1</name>
+      <pose>35.2 -36.8 1.02 0 0 0.90</pose>
+    </include>
+    <include>
+      <uri>model://snow_rock_large</uri>
+      <name>prop_rock_R_rr2a</name>
+      <pose>48.0 -40.5 1.96 0 0 0.30</pose>
+    </include>
+    <include>
+      <uri>model://snow_rock_small</uri>
+      <name>prop_rock_R_rr2b</name>
+      <pose>42.5 -47.5 1.58 0 0 2.10</pose>
+    </include>
+    <include>
+      <uri>model://snow_rock_small</uri>
+      <name>prop_rock_R_rr2c</name>
+      <pose>51.5 -46.0 2.21 0 0 -1.30</pose>
+    </include>
+    <include>
+      <uri>model://snow_bush_large</uri>
+      <name>prop_bush_R_rr2a</name>
+      <pose>47.2 -48.5 1.86 0 0 -0.40</pose>
+    </include>
+    <include>
+      <uri>model://snow_bush_small</uri>
+      <name>prop_bush_R_rr2b</name>
+      <pose>52.8 -42.0 2.25 0 0 1.60</pose>
+    </include>
+
+    <!-- Winter hares. Just outside the Nav2 corridor so lidar/camera can
+         see them; hopper node keeps |y| >= 12 while they hop. -->
+    <include>
+      <uri>model://snow_rabbit</uri>
+      <name>snow_rabbit_flat_L</name>
+      <pose>6.0 14.5 0.00 0 0 0.40</pose>
+    </include>
+    <include>
+      <uri>model://snow_rabbit</uri>
+      <name>snow_rabbit_flat_R</name>
+      <pose>8.0 -14.5 0.00 0 0 -1.20</pose>
+    </include>
+    <include>
+      <uri>model://snow_rabbit</uri>
+      <name>snow_rabbit_ramp_L</name>
+      <pose>28.0 16.5 0.56 0 0 0.20</pose>
+    </include>
+    <include>
+      <uri>model://snow_rabbit</uri>
+      <name>snow_rabbit_ramp_R</name>
+      <pose>36.0 -16.5 1.12 0 0 2.40</pose>
+    </include>
+    <include>
+      <uri>model://snow_rabbit</uri>
+      <name>snow_rabbit_rr1</name>
+      <pose>31.5 -37.0 0.81 0 0 -0.50</pose>
+    </include>
+
+    <!-- Ice pool (hidden until ice_scenario_manager set_pose). Sync with ICE_POOL. -->
+    <include><uri>model://ice_block_small</uri><name>ice_block_01</name><pose>0 0 -20 0 0 0</pose></include>
+    <include><uri>model://ice_block_small</uri><name>ice_block_02</name><pose>3 0 -20 0 0 0</pose></include>
+    <include><uri>model://ice_block_small</uri><name>ice_block_03</name><pose>6 0 -20 0 0 0</pose></include>
+    <include><uri>model://ice_block_medium</uri><name>ice_block_04</name><pose>9 0 -20 0 0 0</pose></include>
+    <include><uri>model://ice_block_medium</uri><name>ice_block_05</name><pose>12 0 -20 0 0 0</pose></include>
+    <include><uri>model://ice_block_medium</uri><name>ice_block_06</name><pose>15 0 -20 0 0 0</pose></include>
+    <include><uri>model://ice_block_large</uri><name>ice_block_07</name><pose>18 0 -20 0 0 0</pose></include>
+    <include><uri>model://ice_block_large</uri><name>ice_block_08</name><pose>21 0 -20 0 0 0</pose></include>
+
+  </world>
+</sdf>

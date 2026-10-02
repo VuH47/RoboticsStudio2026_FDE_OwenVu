@@ -1,0 +1,29 @@
+<?xml version="1.0" ?>
+<!--
+  snow_bush_small — soft obstacle for snow_forest.
+  Origin at ground contact, centred XY. Collision is a cheap cylinder.
+-->
+<sdf version="1.8">
+  <model name="snow_bush_small">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <cast_shadows>false</cast_shadows>
+        <geometry>
+          <mesh>
+            <uri>model://snow_bush_small/meshes/snow_bush_small.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="collision">
+        <pose>0 0 0.35 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.32</radius>
+            <length>0.7</length>
+          </cylinder>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>
