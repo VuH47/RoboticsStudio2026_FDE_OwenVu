@@ -30,6 +30,7 @@ install(
            scripts/husky_nav2_cable_tour.py
            scripts/snow_rabbit_hopper.py
            scripts/parrot_cable_tour.py
+           scripts/parrot_full_cable_tour.py
            scripts/parrot_nav2_cable_tour.py
            scripts/parrot_teleop.py
            scripts/ice_aerial_husky_handoff.py

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cable centreline for alpine_trail ice-block placement .
+"""Cable centreline for alpine_trail ice-block placement (Phase 1).
 
 Every valid ice position is (span_id, cable_id, t) with t in [0, 1] along the
 span (linear in model x). This module is pure Python 3 stdlib; no rclpy.
@@ -452,6 +452,60 @@ def parrot_cable_tour_waypoints(
         ("span01_view", view_x, view_y, view_z, view_yaw),
         ("return_roof", roof_x, roof_y, roof_z, 0.0),
     ]
+
+def parrot_full_cable_tour_waypoints(
+    spawn_xy: Optional[Tuple[float, float]] = None,
+) -> List[Tuple[str, float, float, float, float]]:
+    """Full 3D tour: climb → roof → fly above & between cables along all spans (up and down) → roof.
+
+    Returns (label, x, y, z, yaw).
+    """
+    sx, sy = spawn_xy if spawn_xy is not None else (2.0, 0.0)
+    roof_x, roof_y = DEPLOY_STATION_XY
+    roof_z = DEPLOY_ROOF_Z
+    
+    # We want to face forward along the cable line (+X in model frame = 0 yaw)
+    forward_yaw = 0.0
+    # On the way back, face downhill (-X in model frame = pi)
+    return_yaw = math.pi
+    
+    waypoints = [
+        ("climb", sx, sy, PARROT_CLIMB_Z, 0.0),
+        ("deploy_roof", roof_x, roof_y, roof_z, 0.0),
+    ]
+    
+    # The center between the two cables in world frame is -30.0.
+    center_y = -30.0
+    # Fly high enough to clear the towers (Z_OFFSET + some extra clearance).
+    tour_z_offset = PARROT_VIEW_Z_OFFSET + 1.5 
+    
+    cable_waypoints = []
+    
+    # Approach point
+    first_cable = cable_pose("span_01", "cable_right", 0.0, frame="world")
+    approach_x = 0.5 * (roof_x + first_cable.x)
+    approach_y = 0.5 * (roof_y + center_y)
+    approach_z = max(roof_z, first_cable.z + tour_z_offset)
+    cable_waypoints.append(("approach_cables", approach_x, approach_y, approach_z))
+    
+    # Add waypoints for each span at start, mid, and end
+    for span_id in SPANS.keys():
+        for t in (0.15, 0.5, 0.85):
+            c_pose = cable_pose(span_id, "cable_right", t, frame="world")
+            lbl = f"{span_id}_t{int(t*100)}"
+            # world_y = -30.0 is directly between cable_left and cable_right
+            cable_waypoints.append((lbl, c_pose.x, center_y, c_pose.z + tour_z_offset))
+            
+    # Uphill pass
+    for lbl, x, y, z in cable_waypoints:
+        waypoints.append((lbl + "_up", x, y, z, forward_yaw))
+        
+    # Downhill pass (reversed list, facing backward)
+    for lbl, x, y, z in reversed(cable_waypoints):
+        waypoints.append((lbl + "_down", x, y, z, return_yaw))
+            
+    waypoints.append(("return_roof", roof_x, roof_y, roof_z, 0.0))
+    return waypoints
 
 
 def parrot_nav2_tour_xy() -> List[Tuple[str, float, float, float]]:
