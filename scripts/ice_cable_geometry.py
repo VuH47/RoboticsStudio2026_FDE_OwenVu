@@ -469,9 +469,11 @@ def parrot_full_cable_tour_waypoints(
     # On the way back, face downhill (-X in model frame = pi)
     return_yaw = math.pi
     
+    roof_edge_x = roof_x + 5.0
     waypoints = [
         ("climb", sx, sy, PARROT_CLIMB_Z, 0.0),
-        ("deploy_roof", roof_x, roof_y, roof_z, 0.0),
+        ("deploy_roof_center", roof_x, roof_y, PARROT_CLIMB_Z, 0.0),
+        ("deploy_roof_edge", roof_edge_x, roof_y, PARROT_CLIMB_Z, 0.0),
     ]
     
     # The center between the two cables in world frame is -30.0.
@@ -504,7 +506,8 @@ def parrot_full_cable_tour_waypoints(
     for lbl, x, y, z in reversed(cable_waypoints):
         waypoints.append((lbl + "_down", x, y, z, return_yaw))
             
-    waypoints.append(("return_roof", roof_x, roof_y, roof_z, 0.0))
+    waypoints.append(("return_roof_edge", roof_edge_x, roof_y, PARROT_CLIMB_Z, 0.0))
+    waypoints.append(("return_roof_center", roof_x, roof_y, roof_z, 0.0))
     return waypoints
 
 

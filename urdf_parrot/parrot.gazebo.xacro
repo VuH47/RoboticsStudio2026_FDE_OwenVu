@@ -4,6 +4,7 @@
   <xacro:arg name="camera_visual" default="false"/>
   <xacro:arg name="imu_visual"    default="false"/>
   <xacro:arg name="gz_model_name" default="parrot"/>
+  <xacro:arg name="enable_scan" default="true"/>
   <xacro:property name="gz_model_name" value="$(arg gz_model_name)"/>
 
   
@@ -111,6 +112,7 @@
     </plugin>
   </gazebo>
 
+  <xacro:if value="$(arg enable_scan)">
   <gazebo reference="${prefix}base_scan">
     <turnGravityOff>true</turnGravityOff>
     <material>Gazebo/FlatBlack</material>
@@ -143,6 +145,7 @@
       <always_on>true</always_on>
     </sensor>
   </gazebo>
+  </xacro:if>
 
   <gazebo reference="${prefix}camera_link">
     <turnGravityOff>true</turnGravityOff>
@@ -150,8 +153,8 @@
       <camera>
         <horizontal_fov>2.0944</horizontal_fov>
         <image>
-          <width>720</width>
-          <height>480</height>
+          <width>320</width>
+          <height>240</height>
         </image>
         <clip>
           <near>0.1</near>
@@ -172,10 +175,42 @@
         </depth_camera>
       </camera>
       <always_on>1</always_on>
-      <update_rate>3</update_rate> <!--10-->
+      <update_rate>2</update_rate>
       <visualize>$(arg camera_visual)</visualize>
       <topic>/model/${gz_model_name}/camera</topic>
       <gz_frame_id>${prefix}camera_link</gz_frame_id>
+    </sensor>
+  </gazebo>
+
+  <gazebo reference="${prefix}downward_link">
+    <turnGravityOff>true</turnGravityOff>
+    <sensor type="gpu_lidar" name="downward">
+      <pose relative_to='${prefix}downward_link'>0 0 0 0 0 0</pose>
+      <visualize>false</visualize>
+      <topic>model/${gz_model_name}/downward</topic>
+      <update_rate>5</update_rate>
+      <gz_frame_id>${prefix}downward_link</gz_frame_id>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>3</samples>
+            <resolution>1</resolution>
+            <min_angle>-0.02</min_angle>
+            <max_angle>0.02</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.15</min>
+          <max>30</max>
+          <resolution>0.02</resolution>
+        </range>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.01</stddev>
+        </noise>
+      </ray>
+      <always_on>true</always_on>
     </sensor>
   </gazebo>
 

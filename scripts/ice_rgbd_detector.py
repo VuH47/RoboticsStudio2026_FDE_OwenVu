@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RGB-D perception node for alpine cable ice detection.
+"""RGB-D perception node for alpine cable ice detection
 
 Fuses RGB color segmentation (pale cyan/ice-blue material spectrum) with
 3D depth point cloud geometry. Validates the physical "surface going up"
@@ -78,6 +78,9 @@ class IceRgbdDetector(Node):
         self.declare_parameter('target_frame', 'husky1_map')
         self.declare_parameter('fallback_frame', 'parrot1_odom')
         self.declare_parameter('output_json_path', str(Path.home() / '.ros' / 'ice_detections.json'))
+        self.declare_parameter('parrot_spawn_x', -8.0)
+        self.declare_parameter('parrot_spawn_y', 0.0)
+        self.declare_parameter('parrot_spawn_z', 4.0)
 
         # Tuning thresholds
         self.declare_parameter('min_ice_area_px', 35)
@@ -346,8 +349,11 @@ class IceRgbdDetector(Node):
         # Rotate by camera pitch joint
         p_body = cam_offset + R_pitch.dot(p_cam_link)
 
-        # Rotate by drone attitude and translate
+        # Rotate by drone attitude and translate (in parrot1_odom)
         p_world = np.array([p.x, p.y, p.z], dtype=np.float64) + R_drone.dot(p_body)
+        
+        # parrot1_odom is already absolute world coordinates, no offset needed!
+
         return float(p_world[0]), float(p_world[1]), float(p_world[2])
 
     def _publish_status(self, status: str) -> None:

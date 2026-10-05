@@ -342,6 +342,17 @@ def generate_launch_description():
         description='Optional downward sonar + terrain_map for husky1. Climbing uses scan_filtered even when this is false.',
     )
     ld.add_action(terrain_launch_arg)
+    # Sonar rays without the altitude follower. terrain:=true still enables both.
+    ld.add_action(DeclareLaunchArgument(
+        'sonar',
+        default_value='False',
+        description='Spawn the Husky front sonar lidar. Does not start altitude follow.',
+    ))
+    ld.add_action(DeclareLaunchArgument(
+        'parrot_scan',
+        default_value='True',
+        description='Parrot 360 lidar. Off for the unified demo; that view uses the camera and the downward beam.',
+    ))
     road_gradient_launch_arg = DeclareLaunchArgument(
         'road_gradient',
         default_value='0.10',
@@ -437,7 +448,10 @@ def generate_launch_description():
         spawn_delay=3.0,
         extra_xacro=[
             ' ',
-            'enable_sonar:=', LaunchConfiguration('terrain'),
+            'enable_sonar:=',
+            PythonExpression(
+                _is_true_expression('sonar') + [' or '] + _is_true_expression('terrain')
+            ),
         ],
     )
 
@@ -457,6 +471,10 @@ def generate_launch_description():
         y=LaunchConfiguration('parrot_y'),
         z=LaunchConfiguration('parrot_z'),
         spawn_delay=6.0,
+        extra_xacro=[
+            ' ',
+            'enable_scan:=', LaunchConfiguration('parrot_scan'),
+        ],
     )
 
     # Ground/ramp lidar filter must run before SLAM/Nav2 (7 s). Without it the

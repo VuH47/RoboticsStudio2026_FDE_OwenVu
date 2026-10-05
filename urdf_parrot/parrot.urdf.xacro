@@ -143,4 +143,27 @@
   </joint>
   <link name="${prefix}camera_depth_optical_frame"/>
 
+  <!-- Narrow beam under the hull. Sensor +X is pitched straight down. -->
+  <joint name="${prefix}downward_joint" type="fixed">
+    <parent link="${prefix}base_link"/>
+    <child link="${prefix}downward_link"/>
+    <origin xyz="0 0 -0.05" rpy="0 1.5708 0"/>
+  </joint>
+  <link name="${prefix}downward_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 1.5708 0"/>
+      <geometry>
+        <cylinder length="0.04" radius="0.015"/>
+      </geometry>
+      <material name="dark"/>
+    </visual>
+    <inertial>
+      <mass value="0"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0"
+               iyy="0.001" iyz="0.0"
+               izz="0.001"/>
+    </inertial>
+  </link>
+
 </robot>

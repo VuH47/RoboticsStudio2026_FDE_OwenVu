@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seeded ice-block placement on alpine_trail cables.
+"""Seeded ice-block placement on alpine_trail cables
 
 Preloaded models ice_block_01..08 sit under the world in snow_forest /
 snow_ice_cable_test. This node only calls Gazebo ``set_pose`` (same pattern as
@@ -107,21 +107,34 @@ class IceScenarioManager(Node):
                 self.get_parameter("block_count").value,
             )
         )
-        if bool(self.get_parameter("place_on_start").value):
-            self.create_timer(0.5, self._place_once)
-            self._started = False
-        else:
-            self._started = True
+        self._placed_ok = not bool(self.get_parameter("place_on_start").value)
+        self._place_busy = False
+        self._place_attempts = 0
+        if not self._placed_ok:
+            # Gazebo's set_pose service is often down for the first seconds
+            # of a combined launch. Keep trying instead of writing nothing
+            # and leaving last run's truth file in place.
+            self.create_timer(3.0, self._try_place)
 
-    def _place_once(self) -> None:
-        if self._started:
+    def _try_place(self) -> None:
+        if self._placed_ok or self._place_busy:
             return
-        self._started = True
-        ok, msg = self.apply_scenario()
+        self._place_busy = True
+        self._place_attempts += 1
+        try:
+            ok, msg = self.apply_scenario()
+        finally:
+            self._place_busy = False
         if ok:
+            self._placed_ok = True
             self.get_logger().info(msg)
-        else:
-            self.get_logger().error(msg)
+            return
+        self.get_logger().warn(
+            "Ice place attempt %d failed: %s" % (self._place_attempts, msg)
+        )
+        if self._place_attempts >= 40:
+            self._placed_ok = True
+            self.get_logger().error("Giving up on ice placement after 40 attempts.")
 
     def _on_reset(self, _req: Trigger.Request, resp: Trigger.Response):
         ok, msg = self.apply_scenario()
@@ -168,12 +181,17 @@ class IceScenarioManager(Node):
                 placed += 1
             else:
                 self.get_logger().warn("set_pose failed for %s" % rec["id"])
+        if placed != len(records) or placed != count:
+            return (
+                False,
+                "placed %d/%d seed=%s (truth file not updated)"
+                % (placed, count, seed),
+            )
         self._records = records
         path = self._write_truth(records, seed)
         return (
-            placed == len(records) and placed == count,
-            "placed %d/%d seed=%s truth=%s"
-            % (placed, count, seed, path),
+            True,
+            "placed %d/%d seed=%s truth=%s" % (placed, count, seed, path),
         )
 
     def hide_all(self) -> bool:

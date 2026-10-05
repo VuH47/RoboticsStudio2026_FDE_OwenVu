@@ -147,7 +147,7 @@
         <pose relative_to='${prefix}sonar_link'>0 0 0 0 0 0</pose>
         <visualize>false</visualize>
         <topic>model/${gz_model_name}/sonar</topic>
-        <update_rate>10</update_rate>
+        <update_rate>5</update_rate>
         <gz_frame_id>${prefix}sonar_link</gz_frame_id>
         <ray>
           <scan>
@@ -179,8 +179,8 @@
       <camera>
         <horizontal_fov>2.0944</horizontal_fov>
         <image>
-          <width>720</width>
-          <height>480</height>
+          <width>320</width>
+          <height>240</height>
         </image>
         <clip>
           <near>0.1</near>
@@ -201,7 +201,7 @@
         </depth_camera>
       </camera>
       <always_on>1</always_on>
-      <update_rate>3</update_rate> <!--10-->
+      <update_rate>2</update_rate>
       <visualize>$(arg camera_visual)</visualize>
       <topic>/model/${gz_model_name}/camera</topic>
       <gz_frame_id>${prefix}camera_link</gz_frame_id>

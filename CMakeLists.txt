@@ -34,6 +34,9 @@ install(
            scripts/parrot_nav2_cable_tour.py
            scripts/parrot_teleop.py
            scripts/ice_aerial_husky_handoff.py
+           scripts/ice_unified_handoff.py
+           scripts/ice_random_confirm.py
+           scripts/unified_tf_bridge.py
            scripts/ice_rgbd_detector.py
            scripts/save_slam_map.py
   DESTINATION lib/${PROJECT_NAME}

@@ -16,6 +16,8 @@ def generate_launch_description():
         DeclareLaunchArgument('nav2', default_value='true'),
         DeclareLaunchArgument('world', default_value='snow_forest'),
         DeclareLaunchArgument('terrain', default_value='False'),
+        DeclareLaunchArgument('sonar', default_value='false'),
+        DeclareLaunchArgument('parrot_scan', default_value='true'),
         DeclareLaunchArgument('road_gradient', default_value='0.10'),
         DeclareLaunchArgument('rabbits', default_value='false'),
         IncludeLaunchDescription(
@@ -33,6 +35,8 @@ def generate_launch_description():
                 'nav2': LaunchConfiguration('nav2'),
                 'world': LaunchConfiguration('world'),
                 'terrain': LaunchConfiguration('terrain'),
+                'sonar': LaunchConfiguration('sonar'),
+                'parrot_scan': LaunchConfiguration('parrot_scan'),
                 'road_gradient': LaunchConfiguration('road_gradient'),
                 'rabbits': LaunchConfiguration('rabbits'),
                 'husky': 'True',

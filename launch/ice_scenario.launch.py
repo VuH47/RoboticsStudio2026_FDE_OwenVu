@@ -20,7 +20,7 @@ def generate_launch_description():
             description="Gazebo world name (must match the running sim).",
         ),
         DeclareLaunchArgument("seed", default_value="42"),
-        DeclareLaunchArgument("block_count", default_value="3"),
+        DeclareLaunchArgument("block_count", default_value="8"),
         DeclareLaunchArgument(
             "one_per_span",
             default_value="true",
