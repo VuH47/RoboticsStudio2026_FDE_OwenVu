@@ -1,5 +1,7 @@
 # Timing consistency
-- ros_topic_name: '/clock'
+# Raw Gazebo clock. monotonic_clock.py republishes /clock and drops
+# a sample that steps backwards. A backwards /clock wipes RViz and TF.
+- ros_topic_name: '/clock_gz'
   gz_topic_name: '/clock'
   ros_type_name: 'rosgraph_msgs/msg/Clock'
   gz_type_name: 'gz.msgs.Clock'

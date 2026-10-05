@@ -23,10 +23,16 @@ import rclpy
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped, Twist
 from nav2_msgs.action import NavigateToPose
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import OccupancyGrid, Odometry
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import (
+    DurabilityPolicy,
+    HistoryPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+    qos_profile_sensor_data,
+)
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
@@ -36,6 +42,7 @@ from ice_cable_geometry import (  # noqa: E402
     DEPLOY_ROOF_Z,
     DEPLOY_STATION_XY,
     husky_corridor_goal_for_ice_x,
+    inside_grid,
     parrot_full_cable_tour_waypoints,
 )
 from visualization_msgs.msg import Marker, MarkerArray
@@ -127,8 +134,20 @@ class IceAerialHuskyHandoff(Node):
             10,
         )
 
+        self._map: Optional[OccupancyGrid] = None
         self._husky_nav = ActionClient(
             self, NavigateToPose, f'/{h_ns}/navigate_to_pose')
+        self.create_subscription(
+            OccupancyGrid,
+            f'/{h_ns}/map',
+            self._on_map,
+            QoSProfile(
+                history=HistoryPolicy.KEEP_LAST,
+                depth=1,
+                reliability=ReliabilityPolicy.RELIABLE,
+                durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            ),
+        )
         hz = float(self.get_parameter('control_hz').value)
         self.create_timer(1.0 / max(hz, 1.0), self._tick)
 
@@ -347,16 +366,41 @@ class IceAerialHuskyHandoff(Node):
 
     def _dispatch_husky_sequence(self, final_x: float, final_y: float, final_yaw: float) -> None:
         self._husky_goals = []
-        # Breadcrumbs to clear the global costmap sequentially
-        if final_x > 18.0:
-            self._husky_goals.append((18.0, 0.0, 0.0))
-        if final_x > 25.0:
-            self._husky_goals.append((25.0, 0.0, 0.0))
-        if final_x > 40.0:
-            self._husky_goals.append((40.0, 0.0, 0.0))
-        
+        # One 18 m order is past the grid the lidar has cleared. The 10:00
+        # run aborted on (18, 0) with "goal is off the global costmap".
+        step = 5.0
+        x = 0.0
+        y = 0.0
+        dist = math.hypot(final_x - x, final_y - y)
+        n = int(math.ceil(dist / step)) if dist >= 1.0 else 0
+        for i in range(1, n):
+            t = i / float(n)
+            self._husky_goals.append((x + (final_x - x) * t, y + (final_y - y) * t, 0.0))
         self._husky_goals.append((final_x, final_y, final_yaw))
+        self.get_logger().info(
+            'Husky short steps (%.0f m): %s'
+            % (step, ', '.join('(%.1f, %.1f)' % (g[0], g[1]) for g in self._husky_goals))
+        )
         self._send_next_husky_goal()
+
+    def _on_map(self, msg: OccupancyGrid) -> None:
+        self._map = msg
+
+    def _goal_on_map(self, x: float, y: float) -> bool:
+        grid = self._map
+        if grid is None:
+            return False
+        info = grid.info
+        return inside_grid(
+            info.origin.position.x,
+            info.origin.position.y,
+            info.resolution,
+            info.width,
+            info.height,
+            x,
+            y,
+            1.0,
+        )
 
     def _send_next_husky_goal(self) -> None:
         if self._goal_inflight:
@@ -372,6 +416,13 @@ class IceAerialHuskyHandoff(Node):
             return
 
         x, y, yaw = self._husky_goals[0]
+        if not self._goal_on_map(x, y):
+            self.get_logger().warn(
+                'Holding Husky goal (%.1f, %.1f): the SLAM map does not cover it yet.'
+                % (x, y),
+                throttle_duration_sec=5.0,
+            )
+            return
         qx, qy, qz, qw = _yaw_to_quat(yaw)
         goal = NavigateToPose.Goal()
         goal.pose = PoseStamped()

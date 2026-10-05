@@ -50,6 +50,21 @@ from ice_cable_geometry import (  # noqa: E402
 )
 
 
+def _pinhole(width: float, height: float, hfov: float) -> Tuple[float, float, float, float]:
+    """fx, fy, cx, cy for a square-pixel camera."""
+    fx = (float(width) / 2.0) / math.tan(float(hfov) / 2.0)
+    return fx, fx, float(width) / 2.0, float(height) / 2.0
+
+
+def optical_from_pixel(
+    u: float, v: float, depth_m: float,
+    cx: float, cy: float, fx: float, fy: float,
+) -> Tuple[float, float, float]:
+    """Back-project one depth pixel into the optical frame (X right, Y down, Z forward)."""
+    z = float(depth_m)
+    return ((float(u) - cx) * z / fx, (float(v) - cy) * z / fy, z)
+
+
 def _quat_to_rot_matrix(qx: float, qy: float, qz: float, qw: float) -> np.ndarray:
     """Convert quaternion to 3x3 rotation matrix."""
     return np.array([
@@ -69,6 +84,7 @@ class IceRgbdDetector(Node):
         self.declare_parameter('parrot_namespace', 'parrot1')
         self.declare_parameter('husky_namespace', 'husky1')
         self.declare_parameter('camera_image_topic', '/parrot1/camera/image')
+        self.declare_parameter('camera_depth_topic', '/parrot1/camera/depth/image')
         self.declare_parameter('camera_points_topic', '/parrot1/camera/depth/points')
         self.declare_parameter('odom_topic', '/parrot1/odometry')
         self.declare_parameter('detection_topic', '/fde/detection')
@@ -104,16 +120,20 @@ class IceRgbdDetector(Node):
 
         self._bridge = CvBridge()
         self._latest_points_msg: Optional[PointCloud2] = None
+        self._latest_depth_msg: Optional[Image] = None
         self._latest_odom: Optional[Odometry] = None
+        self._reject_reason = 'no depth yet'
         self._confirmed_detections: List[Dict[str, Any]] = []
         self._last_json_save = 0.0
 
         # Subscriptions
         img_topic = str(self.get_parameter('camera_image_topic').value)
+        depth_topic = str(self.get_parameter('camera_depth_topic').value)
         pts_topic = str(self.get_parameter('camera_points_topic').value)
         odom_top = str(self.get_parameter('odom_topic').value)
 
         self.create_subscription(Image, img_topic, self._on_image, qos_profile_sensor_data)
+        self.create_subscription(Image, depth_topic, self._on_depth, qos_profile_sensor_data)
         self.create_subscription(PointCloud2, pts_topic, self._on_points, qos_profile_sensor_data)
         self.create_subscription(Odometry, odom_top, self._on_odom, qos_profile_sensor_data)
 
@@ -133,11 +153,14 @@ class IceRgbdDetector(Node):
         self._mission_label_pub = self.create_publisher(String, '/mission/hazard_label', 10)
 
         self.get_logger().info(
-            f'Ice RGB-D Perception initialized. Listening to RGB [{img_topic}] + PointCloud [{pts_topic}]'
+            f'Ice RGB-D Perception initialized. RGB [{img_topic}] depth [{depth_topic}] cloud [{pts_topic}]'
         )
 
     def _on_odom(self, msg: Odometry) -> None:
         self._latest_odom = msg
+
+    def _on_depth(self, msg: Image) -> None:
+        self._latest_depth_msg = msg
 
     def _on_points(self, msg: PointCloud2) -> None:
         self._latest_points_msg = msg
@@ -195,18 +218,24 @@ class IceRgbdDetector(Node):
         status_str = 'none'
 
         if candidates:
-            status_str = 'candidate'
             pts_msg = self._latest_points_msg
 
             for cand in candidates:
+                cand['in_depth_range'] = False
                 verified, det_info = self._verify_candidate_geometry(cand, pts_msg, w, h)
                 if verified:
-                    status_str = 'confirmed'
                     cand['confirmed'] = True
                     cand['info'] = det_info
                     detections.append(det_info)
                 else:
                     cand['confirmed'] = False
+
+            if detections:
+                status_str = 'confirmed'
+            elif any(c.get('in_depth_range', False) for c in candidates):
+                status_str = 'candidate'
+            else:
+                status_str = 'none'
 
         # Step 3: Publish results
         self._publish_status(status_str)
@@ -218,13 +247,147 @@ class IceRgbdDetector(Node):
             self._publish_markers(detections)
             self._record_detections(detections)
         elif status_str == 'candidate':
-            # Publish candidate indication
-            cand = candidates[0]
-            cx, cy = cand['centroid_px']
-            self.get_logger().info(f'Ice candidate detected at pixel ({cx}, {cy}), awaiting 3D geometric confirmation...')
+            # Publish candidate indication only when within depth range (<= 10m)
+            in_range = [c for c in candidates if c.get('in_depth_range', False)]
+            if in_range:
+                cand = in_range[0]
+                cx, cy = cand['centroid_px']
+                d_str = f"d={cand.get('depth_m', 0.0):.1f}m, " if 'depth_m' in cand else ""
+                self.get_logger().info(
+                    'Ice candidate at pixel (%d, %d) [%sdepth did not confirm: %s].'
+                    % (cx, cy, d_str, self._reject_reason),
+                    throttle_duration_sec=5.0,
+                )
 
         # Step 4: Generate debug visualization image
         self._publish_debug_image(cv_img, candidates, status_str)
+
+    def _depth_metres(self, msg: Image) -> Optional[np.ndarray]:
+        """Aligned depth as float metres. 16UC1 is millimetres; 32FC1 is metres."""
+        try:
+            if msg.encoding == '16UC1':
+                raw = self._bridge.imgmsg_to_cv2(msg, desired_encoding='16UC1')
+                depth = raw.astype(np.float32) / 1000.0
+            elif msg.encoding == '32FC1':
+                depth = self._bridge.imgmsg_to_cv2(msg, desired_encoding='32FC1').astype(np.float32)
+            else:
+                raw = self._bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+                if raw.ndim == 3:
+                    raw = raw[:, :, 0]
+                if raw.dtype == np.uint16:
+                    depth = raw.astype(np.float32) / 1000.0
+                else:
+                    depth = raw.astype(np.float32)
+            # Sanitize negative or non-finite depth values to NaN
+            depth[~np.isfinite(depth) | (depth < 0.0)] = np.nan
+            return depth
+        except Exception as exc:
+            self._reject_reason = 'depth image unreadable (%s)' % exc
+            return None
+
+    def _samples_from_depth_image(
+        self,
+        candidate: Dict[str, Any],
+        img_w: int,
+        img_h: int,
+        fx: float,
+        fy: float,
+        cx_img: float,
+        cy_img: float,
+    ) -> List[Tuple[float, float, float]]:
+        msg = self._latest_depth_msg
+        if msg is None:
+            self._reject_reason = 'no depth image yet'
+            candidate['in_depth_range'] = False
+            return []
+        depth = self._depth_metres(msg)
+        if depth is None:
+            candidate['in_depth_range'] = False
+            return []
+        dh, dw = depth.shape[:2]
+        bx, by, bw, bh = candidate['bbox']
+        sx = dw / float(img_w)
+        sy = dh / float(img_h)
+        u0 = max(0, int(bx * sx))
+        v0 = max(0, int(by * sy))
+        u1 = min(dw, max(u0 + 1, int((bx + bw) * sx)))
+        v1 = min(dh, max(v0 + 1, int((by + bh) * sy)))
+        patch = depth[v0:v1, u0:u1]
+
+        # Physical depth camera sensor range is 0.4m to 10.0m (Gazebo sensor clip far is 10.0m)
+        valid = np.isfinite(patch) & (patch >= 0.4) & (patch <= 10.0)
+        rows, cols = np.where(valid)
+        if len(cols) == 0:
+            candidate['in_depth_range'] = False
+            self._reject_reason = 'target beyond depth range (>10m)'
+            return []
+
+        candidate['in_depth_range'] = True
+        z_vals = patch[valid]
+        candidate['depth_m'] = float(np.median(z_vals))
+
+        step = max(1, len(cols) // 40)
+        samples: List[Tuple[float, float, float]] = []
+        for i in range(0, len(cols), step):
+            z = float(patch[rows[i], cols[i]])
+            u = (u0 + cols[i] + 0.5) / sx
+            v = (v0 + rows[i] + 0.5) / sy
+            samples.append(optical_from_pixel(u, v, z, cx_img, cy_img, fx, fy))
+            if len(samples) >= 40:
+                break
+        return samples
+
+    def _samples_from_cloud(
+        self,
+        candidate: Dict[str, Any],
+        pts_msg: Optional[PointCloud2],
+        bx: int,
+        by: int,
+        bw: int,
+        bh: int,
+        fx: float,
+        fy: float,
+        cx_img: float,
+        cy_img: float,
+    ) -> List[Tuple[float, float, float]]:
+        """Optical-frame points whose pixels fall in the colour box.
+
+        Tries Z-forward (optical) and X-forward (camera_link). Gazebo's
+        packed cloud is the second one; the first is what the old code assumed.
+        """
+        if pts_msg is None:
+            self._reject_reason = 'no depth cloud yet'
+            return []
+        optical: List[Tuple[float, float, float]] = []
+        camera_link: List[Tuple[float, float, float]] = []
+        try:
+            read = 0
+            for pt in pc2.read_points(pts_msg, field_names=('x', 'y', 'z'), skip_nans=True):
+                read += 1
+                if read > 4000:
+                    break
+                px, py, pz = float(pt[0]), float(pt[1]), float(pt[2])
+                if len(optical) < 40 and 0.4 <= pz <= 10.0:
+                    u = cx_img + fx * (px / pz)
+                    v = cy_img + fy * (py / pz)
+                    if bx <= u <= (bx + bw) and by <= v <= (by + bh):
+                        optical.append((px, py, pz))
+                if len(camera_link) < 40 and 0.4 <= px <= 10.0:
+                    # camera_link: X forward, Y left, Z up -> optical X right, Y down, Z forward.
+                    u = cx_img + fx * (-py / px)
+                    v = cy_img + fy * (-pz / px)
+                    if bx <= u <= (bx + bw) and by <= v <= (by + bh):
+                        camera_link.append((-py, -pz, px))
+                if len(optical) >= 40 and len(camera_link) >= 40:
+                    break
+        except Exception as exc:
+            self._reject_reason = 'depth cloud unreadable (%s)' % exc
+            return []
+        pts = optical if len(optical) >= len(camera_link) else camera_link
+        if pts and not candidate.get('in_depth_range', False):
+            candidate['in_depth_range'] = True
+            candidate['depth_m'] = float(np.median([p[2] for p in pts]))
+        return pts
 
     def _verify_candidate_geometry(
         self,
@@ -234,38 +397,24 @@ class IceRgbdDetector(Node):
         img_h: int,
     ) -> Tuple[bool, Dict[str, Any]]:
         """Verify the 3D surface elevation and radial swelling of the candidate."""
-        if pts_msg is None:
-            return False, {}
-
         bx, by, bw, bh = candidate['bbox']
         hfov = float(self.get_parameter('camera_hfov_rad').value)
-        fx = (img_w / 2.0) / math.tan(hfov / 2.0)
-        fy = fx
-        cx_img = img_w / 2.0
-        cy_img = img_h / 2.0
-
-        # Extract 3D points inside the candidate bounding box
-        matched_3d: List[Tuple[float, float, float]] = []
-
-        try:
-            # Read 3D points
-            for pt in pc2.read_points(pts_msg, field_names=('x', 'y', 'z'), skip_nans=True):
-                px, py, pz = float(pt[0]), float(pt[1]), float(pt[2])
-                if pz <= 0.2 or pz > 35.0:
-                    continue
-                # Camera projection to image coordinates
-                u = cx_img + fx * (px / pz)
-                v = cy_img + fy * (py / pz)
-                if bx <= u <= (bx + bw) and by <= v <= (by + bh):
-                    matched_3d.append((px, py, pz))
-                    if len(matched_3d) > 200:
-                        break
-        except Exception as exc:
-            self.get_logger().debug(f'PointCloud read error: {exc}')
-            return False, {}
-
+        fx, fy, cx_img, cy_img = _pinhole(img_w, img_h, hfov)
         min_pts = int(self.get_parameter('min_cluster_points').value)
+
+        # The depth image is pixel-aligned with the colour image. The point
+        # cloud is not: Gazebo packs it in camera_link (X forward), and the
+        # old projection treated that as an optical cloud (Z forward), so a
+        # colour blob never collected 12 points. Depth image first.
+        matched_3d = self._samples_from_depth_image(candidate, img_w, img_h, fx, fy, cx_img, cy_img)
         if len(matched_3d) < min_pts:
+            matched_3d = self._samples_from_cloud(
+                candidate, pts_msg, bx, by, bw, bh, fx, fy, cx_img, cy_img)
+        if len(matched_3d) < min_pts:
+            if not candidate.get('in_depth_range', False):
+                self._reject_reason = 'target beyond depth range (>10m)'
+            else:
+                self._reject_reason = 'only %d depth samples (need %d)' % (len(matched_3d), min_pts)
             return False, {}
 
         # 3D cluster centroid in camera coordinates
@@ -275,6 +424,7 @@ class IceRgbdDetector(Node):
         # Transform 3D point to world/odom frame
         world_pt = self._transform_cam_to_world(mean_cam)
         if world_pt is None:
+            self._reject_reason = 'no drone odometry'
             return False, {}
 
         wx, wy, wz = world_pt
@@ -284,13 +434,14 @@ class IceRgbdDetector(Node):
         max_cable_prox = float(self.get_parameter('max_cable_proximity_m').value)
 
         if dist_cable > max_cable_prox:
-            # Not close to cable corridor
+            self._reject_reason = '%.1f m from the nearest cable' % dist_cable
             return False, {}
 
         # Transform sample 3D points to world coordinates
         world_pts = [self._transform_cam_to_world(np.array(pt)) for pt in matched_3d[:40]]
         valid_world_pts = [pt for pt in world_pts if pt is not None]
         if not valid_world_pts:
+            self._reject_reason = 'depth points did not transform'
             return False, {}
 
         # Evaluate the "surface going up" radial swelling from cable centerline
@@ -306,6 +457,7 @@ class IceRgbdDetector(Node):
         surface_going_up = est_surface_radius >= min_bulge_r
 
         if not surface_going_up:
+            self._reject_reason = 'surface radius %.2f m is not above the bare cable' % est_surface_radius
             return False, {}
 
         conf = float(self.get_parameter('confidence_confirmed').value)
@@ -457,22 +609,31 @@ class IceRgbdDetector(Node):
     ) -> None:
         annotated = bgr.copy()
 
+        # Candidates within depth sensor physical range (<= 10m) or confirmed
+        in_range_cands = [c for c in candidates if c.get('in_depth_range', False) or c.get('confirmed', False)]
+
         # Banner at top
         banner_color = (0, 0, 200) if status == 'none' else ((0, 180, 255) if status == 'candidate' else (0, 220, 0))
         cv2.rectangle(annotated, (0, 0), (annotated.shape[1], 36), (20, 20, 20), -1)
         cv2.putText(
             annotated,
-            f"PERCEPTION: {status.upper()} | CANDIDATES: {len(candidates)}",
+            f"PERCEPTION: {status.upper()} | IN-RANGE (<=10m): {len(in_range_cands)} | TOTAL RGB: {len(candidates)}",
             (12, 24),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.65,
+            0.55,
             banner_color,
             2,
         )
 
         for cand in candidates:
-            bx, by, bw, bh = cand['bbox']
             is_conf = cand.get('confirmed', False)
+            in_depth = cand.get('in_depth_range', False)
+
+            # Refinement: Keep 20m RGB detection range, but ONLY draw blob when at <= 10m (depth can detect) or confirmed
+            if not is_conf and not in_depth:
+                continue
+
+            bx, by, bw, bh = cand['bbox']
             box_col = (0, 255, 0) if is_conf else (0, 165, 255)
 
             cv2.drawContours(annotated, [cand['contour']], -1, box_col, 2)
@@ -486,7 +647,9 @@ class IceRgbdDetector(Node):
                 lbl = f"CONFIRMED ({info.get('span_id', '')}) r={info.get('estimated_radius', 0):.2f}m"
                 cv2.putText(annotated, lbl, (bx, max(15, by - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             else:
-                cv2.putText(annotated, "CANDIDATE (COLOR OK)", (bx, max(15, by - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 165, 255), 1)
+                depth_m = cand.get('depth_m', None)
+                d_txt = f" d={depth_m:.1f}m" if depth_m is not None else ""
+                cv2.putText(annotated, f"CANDIDATE{d_txt}", (bx, max(15, by - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 165, 255), 1)
 
         try:
             msg = self._bridge.cv2_to_imgmsg(annotated, encoding='bgr8')

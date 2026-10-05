@@ -36,20 +36,14 @@ install(
            scripts/ice_aerial_husky_handoff.py
            scripts/ice_unified_handoff.py
            scripts/ice_random_confirm.py
+           scripts/ice_perception_confirm.py
            scripts/unified_tf_bridge.py
+           scripts/monotonic_clock.py
            scripts/ice_rgbd_detector.py
            scripts/save_slam_map.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Teacher note: the merge conflict here should keep the student's new helper
-# scripts. Installing them lets students run the preflight and health checks via
-# ros2 run after colcon build.
-install(
-  PROGRAMS scripts/sim_preflight_check.sh scripts/sim_health_check.sh
-           scripts/save_slam_map.sh
-  DESTINATION lib/${PROJECT_NAME}
-)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

@@ -551,6 +551,29 @@ def husky_corridor_goal_for_ice_x(ice_x: float) -> Tuple[float, float, float]:
     return (float(ice_x), HUSKY_INSPECT_Y, HUSKY_INSPECT_YAW)
 
 
+def inside_grid(
+    origin_x: float,
+    origin_y: float,
+    resolution: float,
+    width: int,
+    height: int,
+    x: float,
+    y: float,
+    margin: float = 1.0,
+) -> bool:
+    """True when (x, y) is inside an occupancy grid, inset by margin metres.
+
+    Nav2 worldToMap fails, and the planner aborts, when the goal cell is
+    past the last column. The margin keeps the goal off that last cell.
+    """
+    if resolution <= 0.0 or width <= 0 or height <= 0:
+        return False
+    mx = (float(x) - float(origin_x)) / float(resolution)
+    my = (float(y) - float(origin_y)) / float(resolution)
+    inset = float(margin) / float(resolution)
+    return inset <= mx < (width - inset) and inset <= my < (height - inset)
+
+
 def husky_nav2_tour_xy() -> List[Tuple[str, float, float, float]]:
     """Husky Phase 2 short Nav2 loop — cable corridor only (no deploy station).
 

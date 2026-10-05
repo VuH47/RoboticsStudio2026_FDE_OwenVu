@@ -23,10 +23,16 @@ import rclpy
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import Point, PoseStamped, Twist
 from nav2_msgs.action import NavigateToPose
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import OccupancyGrid, Odometry
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import (
+    DurabilityPolicy,
+    HistoryPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+    qos_profile_sensor_data,
+)
 from visualization_msgs.msg import Marker, MarkerArray
 
 _SCRIPTS = Path(__file__).resolve().parent
@@ -36,6 +42,7 @@ if str(_SCRIPTS) not in sys.path:
 from ice_cable_geometry import (  # noqa: E402
     CABLE_ENVELOPE_Y,
     DEPLOY_STATION_XY,
+    inside_grid,
     min_cable_clearance,
     parrot_full_cable_tour_waypoints,
 )
@@ -102,6 +109,9 @@ class IceRandomConfirm(Node):
         self.declare_parameter('truth_wait_seconds', 180.0)
         self.declare_parameter('detect_range_m', 8.0)
         self.declare_parameter('approach_y', -10.0)
+        # One Nav2 order is a short step. An 18 m leg is outside the free
+        # lane the lidar has cleared, and NavFn then fails the whole run.
+        self.declare_parameter('drive_step_m', 5.0)
         self.declare_parameter('deploy_x', DEPLOY_STATION_XY[0])
         self.declare_parameter('deploy_y', DEPLOY_STATION_XY[1])
         self.declare_parameter('pos_tol', 1.5)
@@ -114,6 +124,7 @@ class IceRandomConfirm(Node):
         self._nav_frame = '%s_map' % h_ns
         self._marker_frame = '%s_odom' % h_ns
         self._approach_y = float(self.get_parameter('approach_y').value)
+        self._drive_step = max(3.0, float(self.get_parameter('drive_step_m').value))
         if self._approach_y < CABLE_ENVELOPE_Y:
             self.get_logger().warn(
                 'approach_y %.1f crosses the lane edge %.1f; clamping'
@@ -153,8 +164,20 @@ class IceRandomConfirm(Node):
         self.create_subscription(
             Odometry, '/%s/odometry' % h_ns, self._on_husky_odom,
             qos_profile_sensor_data)
+        self._map: Optional[OccupancyGrid] = None
         self._husky_nav = ActionClient(
             self, NavigateToPose, '/%s/navigate_to_pose' % h_ns)
+        self.create_subscription(
+            OccupancyGrid,
+            '/%s/map' % h_ns,
+            self._on_map,
+            QoSProfile(
+                history=HistoryPolicy.KEEP_LAST,
+                depth=1,
+                reliability=ReliabilityPolicy.RELIABLE,
+                durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            ),
+        )
         hz = float(self.get_parameter('control_hz').value)
         self.create_timer(1.0 / max(hz, 1.0), self._tick)
         self.get_logger().info(
@@ -253,16 +276,50 @@ class IceRandomConfirm(Node):
         )
         return found
 
+    def _push_steps(
+        self,
+        goals: List[Tuple[float, float, float]],
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+        yaw: float,
+    ) -> None:
+        """Split one straight leg into steps no longer than drive_step_m."""
+        dist = math.hypot(x1 - x0, y1 - y0)
+        if dist < 1.0:
+            return
+        n = int(math.ceil(dist / self._drive_step))
+        for i in range(1, n + 1):
+            t = i / float(n)
+            goals.append((x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, yaw))
+
     def _goals_for(self, ice_x: float) -> List[Tuple[float, float, float]]:
-        """Corridor crumbs, then a view on y=0, then the closest lane-edge pose."""
-        goals: List[Tuple[float, float, float]] = []
-        for crumb in (18.0, 25.0, 40.0):
-            if ice_x > crumb + 3.0:
-                goals.append((crumb, 0.0, 0.0))
+        """Short Nav2 steps from where the Husky is to the ice, then to the lane.
+
+        A single 18 m order is the goal the 10:00 planner aborted as off the
+        map. Each order is at most drive_step_m (5 m). Already out on the
+        lane stays on that y: a return to y=0 is the U-turn that spun the map.
+        """
+        pose = self._husky_pose()
+        hx = pose[0] if pose is not None else 0.0
+        hy = pose[1] if pose is not None else 0.0
         face = -math.pi / 2.0
-        goals.append((ice_x, 0.0, face))
-        if self._approach_y < -0.5:
+        out_on_lane = hy < -2.0
+        lane_y = self._approach_y if out_on_lane else 0.0
+        goals: List[Tuple[float, float, float]] = []
+        self._push_steps(goals, hx, hy, ice_x, lane_y, 0.0)
+        if not out_on_lane and self._approach_y < -0.5:
+            self._push_steps(goals, ice_x, lane_y, ice_x, self._approach_y, face)
+        if goals:
+            x, y, _yaw = goals[-1]
+            goals[-1] = (x, y, face)
+        else:
             goals.append((ice_x, self._approach_y, face))
+        self.get_logger().info(
+            'Husky short steps (%.0f m): %s'
+            % (self._drive_step, ', '.join('(%.1f, %.1f)' % (g[0], g[1]) for g in goals))
+        )
         return goals
 
     def _publish_markers(self) -> None:
@@ -368,6 +425,25 @@ class IceRandomConfirm(Node):
         ix, iy, iz = self._active['position']
         return ice_in_husky_camera(pose[0], pose[1], pose[2], pose[3], ix, iy, iz)
 
+    def _on_map(self, msg: OccupancyGrid) -> None:
+        self._map = msg
+
+    def _goal_on_map(self, x: float, y: float) -> bool:
+        grid = self._map
+        if grid is None:
+            return False
+        info = grid.info
+        return inside_grid(
+            info.origin.position.x,
+            info.origin.position.y,
+            info.resolution,
+            info.width,
+            info.height,
+            x,
+            y,
+            1.0,
+        )
+
     def _send_next_goal(self) -> None:
         if self._goal_inflight:
             return
@@ -380,6 +456,13 @@ class IceRandomConfirm(Node):
                 throttle_duration_sec=5.0)
             return
         x, y, yaw = self._goals[0]
+        if not self._goal_on_map(x, y):
+            self.get_logger().warn(
+                'Holding Husky goal (%.1f, %.1f): the SLAM map does not cover it yet.'
+                % (x, y),
+                throttle_duration_sec=5.0,
+            )
+            return
         _qx, _qy, qz, qw = _yaw_to_quat(yaw)
         goal = NavigateToPose.Goal()
         goal.pose = PoseStamped()

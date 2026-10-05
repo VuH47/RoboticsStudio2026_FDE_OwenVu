@@ -418,7 +418,9 @@ def generate_launch_description():
         }.items(),
     ))
 
-    # Bridge the global simulation clock once.
+    # Bridge Gazebo time onto /clock_gz. This node must not use sim time:
+    # it is what feeds the clock, and use_sim_time makes a late sample
+    # step /clock backwards. monotonic_clock.py publishes the monotonic /clock.
     ld.add_action(Node(
         package='ros_ign_bridge',
         executable='parameter_bridge',
@@ -426,8 +428,15 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'config_file': PathJoinSubstitution([config_path, 'gazebo_bridge_clock.yaml']),
-            'use_sim_time': use_sim_time,
+            'use_sim_time': False,
         }],
+    ))
+    ld.add_action(Node(
+        package='41068_ignition_bringup',
+        executable='monotonic_clock.py',
+        name='monotonic_clock',
+        output='screen',
+        parameters=[{'use_sim_time': False}],
     ))
 
     add_robot(

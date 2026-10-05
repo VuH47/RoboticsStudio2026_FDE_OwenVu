@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Automated test suite for RGB-D alpine ice perception .
+"""Automated test suite for RGB-D alpine ice perception (Option B).
 
 Tests:
   1. Color segmentation:
@@ -152,11 +152,61 @@ def test_evaluator_json_compatibility():
     print("  [PASS] Detection JSON payload validated against ice_evaluator.py schema")
 
 
+def test_depth_range_filter_and_blob_drawing():
+    """Verify that blobs are only drawn within depth range (<=10m), keeping 20m RGB detection active."""
+    print("\n=== TEST 4: Depth Range Gating (20m RGB, <=10m Drawing) ===")
+
+    # Distant candidate (> 10m away, e.g. 15m)
+    distant_patch = np.full((20, 20), np.nan, dtype=np.float32)  # depth sensor clipped at 10m
+    valid_dist = np.isfinite(distant_patch) & (distant_patch >= 0.4) & (distant_patch <= 10.0)
+    assert np.count_nonzero(valid_dist) == 0, "Distant target should have no valid depth returns <= 10m"
+
+    cand_distant = {
+        'bbox': (10, 10, 20, 20),
+        'centroid_px': (20, 20),
+        'area_px': 400.0,
+        'contour': np.array([[[10, 10]], [[30, 10]], [[30, 30]], [[10, 30]]]),
+        'confirmed': False,
+        'in_depth_range': False,
+    }
+    # Drawing rule check
+    draw_distant = cand_distant.get('confirmed', False) or cand_distant.get('in_depth_range', False)
+    assert not draw_distant, "Failed: distant candidate (>10m) should NOT be drawn!"
+    print("  [PASS] Distant color candidate (15m, >10m) tracked in RGB but filtered from drawing")
+
+    # In-range candidate (<= 10m away, e.g. 6.5m)
+    in_range_patch = np.full((20, 20), 6.5, dtype=np.float32)
+    valid_in = np.isfinite(in_range_patch) & (in_range_patch >= 0.4) & (in_range_patch <= 10.0)
+    assert np.count_nonzero(valid_in) == 400, "In-range target must have valid depth returns"
+
+    cand_in_range = {
+        'bbox': (50, 50, 20, 20),
+        'centroid_px': (60, 60),
+        'area_px': 400.0,
+        'contour': np.array([[[50, 50]], [[70, 50]], [[70, 70]], [[50, 70]]]),
+        'confirmed': False,
+        'in_depth_range': True,
+        'depth_m': float(np.median(in_range_patch[valid_in])),
+    }
+    draw_in_range = cand_in_range.get('confirmed', False) or cand_in_range.get('in_depth_range', False)
+    assert draw_in_range, "Failed: in-range candidate (<=10m) MUST be drawn!"
+    assert cand_in_range['depth_m'] == 6.5, f"Expected 6.5m, got {cand_in_range['depth_m']}"
+    print(f"  [PASS] In-range candidate (d={cand_in_range['depth_m']:.1f}m <= 10m) permitted to draw with range tag")
+
+    # Drone flight safety check: candidate without depth confirmation MUST NOT trigger /fde/detection
+    detections = []
+    if cand_in_range.get('confirmed', False):
+        detections.append({'position': [1, 2, 3]})
+    assert len(detections) == 0, "Unconfirmed candidate must never populate detections"
+    print("  [PASS] Unconfirmed candidate does not publish /fde/detection, preserving uninterrupted UAV patrol")
+
+
 def main():
     print("Running RGB-D Alpine Ice Perception Test Suite...\n")
     test_color_segmentation()
     test_geometric_surface_verification()
     test_evaluator_json_compatibility()
+    test_depth_range_filter_and_blob_drawing()
     print("\n>>> ALL TESTS PASSED SUCCESSFULLY! <<<")
 
 

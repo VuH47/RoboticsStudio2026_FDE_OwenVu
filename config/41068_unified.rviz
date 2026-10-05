@@ -58,8 +58,8 @@ Visualization Manager:
     Description File: ''
     Description Source: Topic
     Description Topic:
-      Depth: 5
-      Durability Policy: Volatile
+      Depth: 1
+      Durability Policy: Transient Local
       History Policy: Keep Last
       Reliability Policy: Reliable
       Value: /husky1/robot_description
@@ -173,8 +173,8 @@ Visualization Manager:
     Enabled: true
     Name: SLAM Map
     Topic:
-      Depth: 5
-      Durability Policy: Volatile
+      Depth: 1
+      Durability Policy: Transient Local
       Filter size: 10
       History Policy: Keep Last
       Reliability Policy: Reliable
@@ -414,15 +414,15 @@ Visualization Manager:
     Enabled: true
     Name: Global Costmap
     Topic:
-      Depth: 5
-      Durability Policy: Volatile
+      Depth: 1
+      Durability Policy: Transient Local
       Filter size: 10
       History Policy: Keep Last
       Reliability Policy: Reliable
       Value: /husky1/global_costmap/costmap
     Update Topic:
-      Depth: 5
-      Durability Policy: Volatile
+      Depth: 1
+      Durability Policy: Transient Local
       History Policy: Keep Last
       Reliability Policy: Reliable
       Value: /husky1/global_costmap/costmap_updates
@@ -435,15 +435,15 @@ Visualization Manager:
     Enabled: true
     Name: Local Costmap
     Topic:
-      Depth: 5
-      Durability Policy: Volatile
+      Depth: 1
+      Durability Policy: Transient Local
       Filter size: 10
       History Policy: Keep Last
       Reliability Policy: Reliable
       Value: /husky1/local_costmap/costmap
     Update Topic:
-      Depth: 5
-      Durability Policy: Volatile
+      Depth: 1
+      Durability Policy: Transient Local
       History Policy: Keep Last
       Reliability Policy: Reliable
       Value: /husky1/local_costmap/costmap_updates
@@ -466,8 +466,8 @@ Visualization Manager:
     Description File: ''
     Description Source: Topic
     Description Topic:
-      Depth: 5
-      Durability Policy: Volatile
+      Depth: 1
+      Durability Policy: Transient Local
       History Policy: Keep Last
       Reliability Policy: Reliable
       Value: /parrot1/robot_description
