@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import rclpy
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import Point, PoseStamped, Twist
+from std_msgs.msg import String
 from nav2_msgs.action import NavigateToPose
 from nav_msgs.msg import OccupancyGrid, Odometry
 from rclpy.action import ActionClient
@@ -47,13 +48,13 @@ from ice_cable_geometry import (  # noqa: E402
     parrot_full_cable_tour_waypoints,
 )
 
-# Husky RGB camera: base_link + (0.45, 0, 0.25), looking +X, 120 deg, far 40 m.
-# Depth only reaches 10 m, which is closer than the lane allows, so the
-# confirm is the colour camera, not the depth cloud.
+# Legacy geometrical frustum check when visual confirmation is disabled.
+# Camera: base_link + (0.45, 0, 0.25), pitched up ~20 deg (-0.35 rad).
 _CAM_X = 0.45
 _CAM_Z = 0.25
-_HFOV = 2.0944
-_VFOV = 2.0 * math.atan(math.tan(_HFOV * 0.5) * (240.0 / 320.0))
+_CAM_PITCH_UP = 0.35
+_HFOV = 1.309
+_VFOV = 2.0 * math.atan(math.tan(_HFOV * 0.5) * (480.0 / 640.0))
 _CAM_NEAR = 0.4
 _CAM_FAR = 40.0
 
@@ -88,7 +89,7 @@ def ice_in_husky_camera(
         return False
     if abs(math.atan2(left, ahead)) > _HFOV * 0.5:
         return False
-    if abs(math.atan2(dz, ahead)) > _VFOV * 0.5:
+    if abs(math.atan2(dz, ahead) - _CAM_PITCH_UP) > _VFOV * 0.5:
         return False
     return True
 
@@ -97,6 +98,8 @@ class Phase(Enum):
     WAIT_TRUTH = auto()
     PATROL = auto()
     CONFIRM = auto()
+    ALIGN = auto()
+    INSPECT = auto()
     DONE = auto()
 
 
@@ -118,6 +121,8 @@ class IceRandomConfirm(Node):
         self.declare_parameter('yaw_tol', 0.45)
         self.declare_parameter('hold_seconds', 0.8)
         self.declare_parameter('control_hz', 20.0)
+        self.declare_parameter('require_husky_visual_confirmation', False)
+        self.declare_parameter('visual_confirm_timeout_s', 12.0)
 
         p_ns = str(self.get_parameter('parrot_namespace').value)
         h_ns = str(self.get_parameter('husky_namespace').value)
@@ -149,12 +154,20 @@ class IceRandomConfirm(Node):
         self._started_at = time.monotonic()
         self._start_wall = time.time()
 
+        self._use_visual = bool(self.get_parameter('require_husky_visual_confirmation').value)
+        self._inspection_sequence = 0
+        self._inspection_request_id: Optional[str] = None
+        self._inspection_started = 0.0
+        self._align_target_yaw = 0.0
+        self._align_started = 0.0
+
         dx = float(self.get_parameter('deploy_x').value)
         dy = float(self.get_parameter('deploy_y').value)
         self._patrol: List[Waypoint] = parrot_full_cable_tour_waypoints(
             spawn_xy=(dx, dy))
 
         self._cmd_pub = self.create_publisher(Twist, '/%s/cmd_vel' % p_ns, 10)
+        self._husky_cmd_pub = self.create_publisher(Twist, '/%s/cmd_vel' % h_ns, 10)
         self._marker_pub = self.create_publisher(
             MarkerArray, '/%s/tour_markers' % p_ns, 10)
         self.create_timer(0.5, self._publish_markers)
@@ -178,6 +191,11 @@ class IceRandomConfirm(Node):
                 durability=DurabilityPolicy.TRANSIENT_LOCAL,
             ),
         )
+        self._visual_request_pub = self.create_publisher(
+            String, '/%s/ice_confirm/request' % h_ns, 10)
+        self.create_subscription(
+            String, '/%s/ice_confirm/result' % h_ns,
+            self._on_husky_visual_result, 10)
         hz = float(self.get_parameter('control_hz').value)
         self.create_timer(1.0 / max(hz, 1.0), self._tick)
         self.get_logger().info(
@@ -307,15 +325,22 @@ class IceRandomConfirm(Node):
         face = -math.pi / 2.0
         out_on_lane = hy < -2.0
         lane_y = self._approach_y if out_on_lane else 0.0
+        drive_yaw = 0.0 if ice_x >= hx else math.pi
         goals: List[Tuple[float, float, float]] = []
-        self._push_steps(goals, hx, hy, ice_x, lane_y, 0.0)
-        if not out_on_lane and self._approach_y < -0.5:
-            self._push_steps(goals, ice_x, lane_y, ice_x, self._approach_y, face)
-        if goals:
-            x, y, _yaw = goals[-1]
-            goals[-1] = (x, y, face)
+        self._push_steps(goals, hx, hy, ice_x, lane_y, drive_yaw)
+        if not self._use_visual:
+            target_face = -math.pi / 2.0
+            if self._active and 'position' in self._active:
+                ix, iy = self._active['position'][:2]
+                target_face = math.atan2(iy - self._approach_y, ix - ice_x)
+            if goals:
+                x, y, _yaw = goals[-1]
+                goals[-1] = (x, y, target_face)
+            else:
+                goals.append((ice_x, self._approach_y, target_face))
         else:
-            goals.append((ice_x, self._approach_y, face))
+            if not goals:
+                goals.append((ice_x, lane_y, drive_yaw))
         self.get_logger().info(
             'Husky short steps (%.0f m): %s'
             % (self._drive_step, ', '.join('(%.1f, %.1f)' % (g[0], g[1]) for g in goals))
@@ -444,11 +469,39 @@ class IceRandomConfirm(Node):
             1.0,
         )
 
+    def _stop_husky(self) -> None:
+        self._husky_cmd_pub.publish(Twist())
+
+    def _prepare_visual_inspection(self) -> None:
+        if not self._use_visual or self._active is None:
+            return
+        pose = self._husky_pose()
+        if pose is None:
+            self._start_visual_inspection()
+            return
+        hx, hy, _hz, hyaw = pose
+        ix, iy, _iz = self._active['position']
+        target_yaw = math.atan2(iy - hy, ix - hx)
+        err = _yaw_err(target_yaw, hyaw)
+        if abs(err) > 0.15:
+            self._align_target_yaw = target_yaw
+            self._align_started = time.monotonic()
+            self._phase = Phase.ALIGN
+            self.get_logger().info(
+                'Husky aiming toward ice (%.1f, %.1f): target_yaw=%.2f, current=%.2f (err=%.2f rad)'
+                % (ix, iy, target_yaw, hyaw, err))
+        else:
+            self._stop_husky()
+            self._start_visual_inspection()
+
     def _send_next_goal(self) -> None:
         if self._goal_inflight:
             return
         if not self._goals:
-            self._finish_confirm()
+            if self._use_visual:
+                self._prepare_visual_inspection()
+            else:
+                self._finish_confirm()
             return
         if not self._husky_nav.wait_for_server(timeout_sec=0.0):
             self.get_logger().warn(
@@ -484,13 +537,14 @@ class IceRandomConfirm(Node):
         except Exception as exc:
             self._goal_inflight = False
             self.get_logger().error('Nav2 goal send failed: %s' % exc)
+            self._finish_confirm('navigation_failed' if self._use_visual else None)
             return
         if handle is None or not handle.accepted:
             self._goal_inflight = False
             self._goal_rejects += 1
             if self._goal_rejects >= 8:
                 self.get_logger().error('Husky kept rejecting the approach.')
-                self._finish_confirm()
+                self._finish_confirm('navigation_failed' if self._use_visual else None)
             return
         self._goal_rejects = 0
         if self._goals:
@@ -503,37 +557,100 @@ class IceRandomConfirm(Node):
             status = future.result().status
         except Exception as exc:
             self.get_logger().error('Nav2 result failed: %s' % exc)
-            self._finish_confirm()
+            self._finish_confirm('navigation_failed' if self._use_visual else None)
             return
         ok = status == GoalStatus.STATUS_SUCCEEDED
-        if ok and self._camera_sees_active():
-            self._saw_in_camera = True
-            self.get_logger().info('Ice is inside the Husky camera.')
-        if ok and self._goals:
-            self._send_next_goal()
-            return
         if not ok:
             self.get_logger().warn(
-                'Approach segment failed (status %s); using the closest pose that still sees the ice.'
-                % status)
-        self._finish_confirm()
-
-    def _finish_confirm(self) -> None:
-        if self._phase != Phase.CONFIRM or self._active is None:
+                'Husky approach segment failed (status %s).' % status)
+            self._finish_confirm('navigation_failed' if self._use_visual else None)
             return
-        self._active['state'] = 'confirmed' if self._saw_in_camera else 'missed'
+        if self._use_visual:
+            if self._goals:
+                self._send_next_goal()
+            else:
+                self._prepare_visual_inspection()
+            return
+        # Legacy Mission 2 geometrical frustum check
+        if self._camera_sees_active():
+            self._saw_in_camera = True
+            self.get_logger().info('Ice is inside the Husky camera.')
+        if self._goals:
+            self._send_next_goal()
+        else:
+            self._finish_confirm()
+
+    def _start_visual_inspection(self) -> None:
+        if not self._use_visual or self._phase not in (Phase.CONFIRM, Phase.ALIGN) or self._active is None:
+            return
+        self._stop_husky()
+        self._inspection_sequence += 1
+        self._inspection_request_id = '%s_%d' % (
+            self._active['key'], self._inspection_sequence)
+        self._inspection_started = time.monotonic()
+        self._phase = Phase.INSPECT
+        request = {
+            'request_id': self._inspection_request_id,
+            'frame_id': self._marker_frame,
+            'position': list(self._active['position']),
+        }
+        self._visual_request_pub.publish(String(data=json.dumps(request)))
+        self.get_logger().info('Husky RGB inspection requested: %s' % self._inspection_request_id)
+
+    def _on_husky_visual_result(self, msg: String) -> None:
+        if not self._use_visual or self._phase != Phase.INSPECT or self._active is None:
+            return
+        try:
+            payload = json.loads(msg.data)
+        except (ValueError, TypeError):
+            self.get_logger().warn('Ignoring malformed Husky visual result.')
+            return
+        if payload.get('request_id') != self._inspection_request_id:
+            return  # stale result from a different hazard
+        status = payload.get('status')
+        if status not in ('CONFIRMED', 'NOT_CONFIRMED', 'INCONCLUSIVE'):
+            self.get_logger().warn('Ignoring unknown Husky visual status %s' % status)
+            return
+        self.get_logger().info(
+            'Husky REAL IMAGE verdict: %s, pixel-positive frames=%s/%s, evidence=%s'
+            % (status, payload.get('positive_frames'), payload.get('valid_frames'),
+               payload.get('image_path')))
+        self._active['visual_evidence'] = payload
+        self._finish_confirm({
+            'CONFIRMED': 'confirmed',
+            'NOT_CONFIRMED': 'not_confirmed',
+            'INCONCLUSIVE': 'inconclusive',
+        }[status])
+
+    def _hold_parrot(self) -> None:
+        """Hover where the Parrot was when the Husky was sent, or stop."""
+        if self._hover is not None:
+            self._fly_toward(*self._hover)
+        else:
+            self._stop_parrot()
+
+    def _finish_confirm(self, outcome: Optional[str] = None) -> None:
+        if self._phase not in (Phase.CONFIRM, Phase.ALIGN, Phase.INSPECT) or self._active is None:
+            return
+        self._stop_husky()
+        if self._use_visual:
+            self._active['state'] = outcome or 'inconclusive'
+        else:
+            self._active['state'] = 'confirmed' if self._saw_in_camera else 'missed'
         self.get_logger().info(
             '%s %s' % (self._active['span'], self._active['state']))
         self._active = None
         self._goals = []
         self._goal_inflight = False
         self._saw_in_camera = False
+        self._inspection_request_id = None
         self._hover = None
         self._phase = Phase.PATROL
 
     def _tick(self) -> None:
         if self._phase == Phase.DONE:
             self._stop_parrot()
+            self._stop_husky()
             return
         if self._phase == Phase.WAIT_TRUTH:
             self._truth = self._load_truth()
@@ -574,10 +691,12 @@ class IceRandomConfirm(Node):
                 pending = [f for f in self._seen.values() if f['state'] == 'seen']
                 if not pending:
                     self.get_logger().info(
-                        'Patrol finished. confirmed=%d missed=%d'
+                        'Patrol finished. confirmed=%d not_confirmed=%d inconclusive=%d missed=%d'
                         % (
                             sum(1 for f in self._seen.values() if f['state'] == 'confirmed'),
-                            sum(1 for f in self._seen.values() if f['state'] == 'missed'),
+                            sum(1 for f in self._seen.values() if f['state'] == 'not_confirmed'),
+                            sum(1 for f in self._seen.values() if f['state'] == 'inconclusive'),
+                            sum(1 for f in self._seen.values() if f['state'] in ('missed', 'navigation_failed')),
                         ))
                     self._phase = Phase.DONE
                 return
@@ -588,13 +707,39 @@ class IceRandomConfirm(Node):
             return
 
         if self._phase == Phase.CONFIRM:
-            if self._hover is not None:
-                self._fly_toward(*self._hover)
-            else:
-                self._stop_parrot()
-            if self._camera_sees_active():
+            self._hold_parrot()
+            if not self._use_visual and self._camera_sees_active():
                 self._saw_in_camera = True
             self._send_next_goal()
+            return
+
+        if self._phase == Phase.ALIGN:
+            self._hold_parrot()
+            pose = self._husky_pose()
+            if pose is None or time.monotonic() - self._align_started > 8.0:
+                self._stop_husky()
+                self._start_visual_inspection()
+                return
+            err = _yaw_err(self._align_target_yaw, pose[3])
+            if abs(err) <= 0.15:
+                self._stop_husky()
+                self.get_logger().info('Husky aligned with ice target (err=%.2f rad). Starting inspection.' % err)
+                self._start_visual_inspection()
+                return
+            cmd = Twist()
+            cmd.angular.z = max(-1.0, min(1.0, 1.8 * err))
+            if abs(cmd.angular.z) < 0.3:
+                cmd.angular.z = 0.3 if err > 0 else -0.3
+            self._husky_cmd_pub.publish(cmd)
+            return
+
+        if self._phase == Phase.INSPECT:
+            self._hold_parrot()
+            if time.monotonic() - self._inspection_started > float(
+                self.get_parameter('visual_confirm_timeout_s').value
+            ):
+                self.get_logger().warn('Husky visual confirmation timed out.')
+                self._finish_confirm('inconclusive')
             return
 
 

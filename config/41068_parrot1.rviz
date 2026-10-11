@@ -42,9 +42,9 @@ Visualization Manager:
     Name: Grid
     Normal Cell Count: 0
     Offset:
-      X: 0
+      X: -8
       Y: 0
-      Z: 0
+      Z: 4
     Plane: XY
     Plane Cell Count: 10
     Reference Frame: <Fixed Frame>

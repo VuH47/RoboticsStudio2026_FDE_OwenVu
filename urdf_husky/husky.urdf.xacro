@@ -136,7 +136,8 @@
   </link>
 
   <joint name="${prefix}camera_joint" type="fixed">
-    <origin xyz="0.45 0.0 0.25" rpy="0 0 0"/> <!-- 0.5 0.0 0.9 -->
+    <!-- Tilt front RGB-D upward 20 degrees to view overhead cable from the ski corridor. -->
+    <origin xyz="0.45 0.0 0.25" rpy="0 -0.35 0"/>
     <parent link="${prefix}base_link"/>
     <child link="${prefix}camera_link"/>
   </joint>

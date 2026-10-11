@@ -41,6 +41,16 @@ install(
            scripts/monotonic_clock.py
            scripts/ice_rgbd_detector.py
            scripts/save_slam_map.py
+           scripts/husky_ice_vision_core.py
+           scripts/husky_ice_visual_confirm.py
+           scripts/test_husky_ice_visual_confirm.py
+           scripts/detection_viewer.py
+           scripts/detection_viewer_core.py
+           scripts/test_detection_viewer.py
+           scripts/test_husky_pose_correction.py
+           scripts/test_scan_ground_filter_pitch.py
+           scripts/ice_target_tracker.py
+           scripts/test_ice_target_tracker.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

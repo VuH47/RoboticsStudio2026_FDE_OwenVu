@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""PFMS-style terrain perception from a downward sonar LaserScan + odom.
+"""Terrain perception from a downward sonar LaserScan + odom.
 
 Builds a rolling elevation grid and publishes an OccupancyGrid where cells
 steeper than road_gradient are occupied (100) and shallower cells are free (0).
-Reimplements the METHOD of PFMS TerrainAnalysis in Python (not a C++ port).
+Reimplements the METHOD of PFMS TerrainAnalysis in Python
 """
 
 from __future__ import annotations

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score ice detections against the scenario ground-truth file.
+"""Score ice detections against the scenario ground-truth file (Phase 6).
 
 The RGB detector must NOT subscribe to this node and this node does not
 publish ice positions. It only reads files:

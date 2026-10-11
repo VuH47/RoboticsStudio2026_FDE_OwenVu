@@ -116,13 +116,13 @@ controller_server:
     - FollowPath
     progress_checker:
       plugin: nav2_controller::SimpleProgressChecker
-      required_movement_radius: 0.3
-      movement_time_allowance: 30.0
+      required_movement_radius: 0.2
+      movement_time_allowance: 40.0
     general_goal_checker:
       stateful: true
       plugin: nav2_controller::SimpleGoalChecker
       xy_goal_tolerance: 1.0
-      yaw_goal_tolerance: 1.57
+      yaw_goal_tolerance: 0.8
     FollowPath:
       plugin: dwb_core::DWBLocalPlanner
       debug_trajectory_details: false
@@ -148,7 +148,7 @@ controller_server:
       angular_granularity: 0.2
       transform_tolerance: 2.0
       xy_goal_tolerance: 1.0
-      yaw_goal_tolerance: 1.57
+      yaw_goal_tolerance: 0.8
       trans_stopped_velocity: 0.25
       short_circuit_trajectory_evaluation: true
       stateful: true
@@ -198,7 +198,12 @@ local_costmap:
         observation_sources: scan_filtered
         scan_filtered:
           topic: scan_filtered
-          max_obstacle_height: 2.0
+          # Heights are measured in the costmap frame, i.e. WORLD z. The EKF is 3D now,
+          # so on the ramp the lidar sits at z = ramp height + 0.85 m (about 5 m at the
+          # summit) and the old 2.0 m cap dropped every hit there. Ground and ramp hits
+          # are already removed by scan_ground_filter, so only widen the window.
+          min_obstacle_height: -2.0
+          max_obstacle_height: 50.0
           clearing: true
           marking: true
           data_type: LaserScan
@@ -234,7 +239,12 @@ global_costmap:
         observation_sources: scan_filtered
         scan_filtered:
           topic: scan_filtered
-          max_obstacle_height: 2.0
+          # Heights are measured in the costmap frame, i.e. WORLD z. The EKF is 3D now,
+          # so on the ramp the lidar sits at z = ramp height + 0.85 m (about 5 m at the
+          # summit) and the old 2.0 m cap dropped every hit there. Ground and ramp hits
+          # are already removed by scan_ground_filter, so only widen the window.
+          min_obstacle_height: -2.0
+          max_obstacle_height: 50.0
           clearing: true
           marking: true
           data_type: LaserScan

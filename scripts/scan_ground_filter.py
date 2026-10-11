@@ -81,8 +81,16 @@ class ScanGroundFilter(Node):
         z = self.lidar_xyz[2] + mz
         horizontal = math.hypot(x, y)
         # Tilt ground plane with robot pitch so ramp hits stay "ground" while climbing.
-        expected_ground_z = self.ground_z + mx * math.tan(self._pitch)
-        height_above = z - expected_ground_z
+        # The EKF now reports real pitch (it was always 0 in 2D mode). The world
+        # slope is unknown here, so test two planes: level world ground, which
+        # tilts by the robot pitch in the robot frame, and a slope parallel to
+        # the robot, which does not tilt. Taking the closer one keeps the old
+        # (pitch 0) behaviour on a ramp and fixes the crest (nose up, level
+        # ground ahead). Using only the tilted plane painted the ramp behind the
+        # robot as a wall while descending.
+        tilt_shift = mx * math.tan(self._pitch)
+        height_above = min(
+            (z - (self.ground_z + shift) for shift in (0.0, tilt_shift)), key=abs)
         if horizontal < 0.05:
             return abs(height_above) <= self.height_tolerance
 
@@ -111,7 +119,6 @@ class ScanGroundFilter(Node):
         out.scan_time = msg.scan_time
         out.range_min = msg.range_min
         out.range_max = msg.range_max
-        inf = float('inf')
         filtered = []
         for i, r in enumerate(msg.ranges):
             if not math.isfinite(r) or r <= msg.range_min or r >= msg.range_max:
@@ -119,7 +126,12 @@ class ScanGroundFilter(Node):
                 continue
             angle = msg.angle_min + i * msg.angle_increment
             if self._is_ground(r, angle):
-                filtered.append(inf)
+                # Stay above slam max_laser_range (39 m) and below lidar
+                # range_max (40 m). A beam at or under the threshold is a
+                # scan-match point, and a shorter one is stored as a wall.
+                # Karto then sizes the grid from the real trunks and towers,
+                # which is what covered the ski lane in the 19:13 run.
+                filtered.append(max(msg.range_min + 0.05, float(msg.range_max) - 0.05))
             else:
                 filtered.append(r)
         out.ranges = filtered

@@ -18,27 +18,39 @@
     map_start_pose: [0.0, 0.0, 0.0]
     debug_logging: false
     throttle_scans: 1
+    # Message-filter queue, not the Karto scan buffer. The default of 1
+    # drops a scan as soon as the next one arrives so
+    # the grid never grows out to the goal.
+    scan_queue_size: 10
     transform_publish_period: 0.02
     map_update_interval: 1.0
     resolution: 0.05
     min_laser_range: 0.2
-    max_laser_range: 40.0
+    max_laser_range: 39.0
     minimum_time_interval: 0.5
     transform_timeout: 1.0
     tf_buffer_duration: 30.0
     stack_size_to_use: 40000000
     enable_interactive_mode: true
     use_scan_matching: true
-    use_scan_barycenter: true
-    minimum_travel_distance: 0.0
-    # Require 0 rad turn so the first scan at spawn grows the map immediately.
-    minimum_travel_heading: 0.0
+    # Barycenter pulls yaw when every return is on one side (the alpine).
+    use_scan_barycenter: false
+    # Karto keeps a scan when travel OR heading exceeds these. The first
+    # scan is the prescan the stack drives on. A later scan is added only
+    # after 0.5 m of driving, which is what extends that map up the slope.
+    # Heading is one full turn, so a spin recovery or the face-the-ice
+    # yaw never qualifies on its own. Wheel and IMU yaw carry that turn.
+    minimum_travel_distance: 0.5
+    minimum_travel_heading: 6.2832
     scan_buffer_size: 10
-    scan_buffer_maximum_scan_distance: 40.0
-    link_match_minimum_response_fine: 0.1
+    scan_buffer_maximum_scan_distance: 10.0
+    link_match_minimum_response_fine: 0.45
     link_scan_maximum_distance: 3.0
     loop_search_maximum_distance: 3.0
-    do_loop_closing: true
+    # Identical trunks were accepted as loop closures and folded the map
+    # (measured husky1 map to huskodom yaw about 134deg). Local matching
+    # is enough for one pass up the corridor.
+    do_loop_closing: false
     loop_match_minimum_chain_size: 10
     loop_match_maximum_variance_coarse: 3.0
     loop_match_minimum_response_coarse: 0.35
@@ -50,12 +62,18 @@
     loop_search_space_resolution: 0.05
     loop_search_space_smear_deviation: 0.03
     distance_variance_penalty: 0.5
-    angle_variance_penalty: 1.0
+    # ANGLE PENALTY GAIN is 0.2 and the old floor was 0.9, so a wrong yaw
+    # inside the search window lost almost no score. A tighter variance
+    # and a lower floor make the odometry heading win a tie.
+    angle_variance_penalty: 0.15
     fine_search_angle_offset: 0.00349
-    coarse_search_angle_offset: 0.349
+    # Was +-20 deg, and response expansion added another 60 deg whenever
+    # the score was zero. That is the yaw jump onto a repeated trunk.
+    # +-5 deg around the odometry heading, and no expansion.
+    coarse_search_angle_offset: 0.0873
     coarse_angle_resolution: 0.0349
-    minimum_angle_penalty: 0.9
+    minimum_angle_penalty: 0.2
     minimum_distance_penalty: 0.5
-    use_response_expansion: true
+    use_response_expansion: false
     # Grow the map faster for long ramp missions (default SLAM map is tiny).
     # Values used by slam_toolbox online async when supported by the plugin build.
