@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Operator console for the Parrot + Husky ice inspection mission.
 
 PySide6 GUI. ROS runs in a background executor thread and only fills a
