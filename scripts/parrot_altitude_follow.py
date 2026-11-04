@@ -7,7 +7,7 @@ spawn height (~0.8 m) while the 4° ramp surface rises:
   z_surface(x) = (x - 20) * tan(0.07)
 
 Past x ≈ 31 m the surface is above the drone → it tunnels into the open-bottom
-wedge collision (looks "fully inside the ramp"). This node merges Nav2 plana
+wedge collision (looks "fully inside the ramp"). This node merges Nav2 planar
 cmd_vel with a P-controller on z so the drone climbs with the terrain.
 """
 
