@@ -19,18 +19,30 @@
     debug_logging: false
     throttle_scans: 1
     # Message-filter queue, not the Karto scan buffer. The default of 1
-    # drops a scan as soon as the next one arrives so
+    # drops a scan as soon as the next one arrives ("queue is full"), so
     # the grid never grows out to the goal.
     scan_queue_size: 10
     transform_publish_period: 0.02
     map_update_interval: 1.0
     resolution: 0.05
     min_laser_range: 0.2
+    # Karto sizes the grid from real returns inside [min, threshold]
+    # inclusive. Cleared lane beams are range_max - 0.05 (~39.95 m), which
+    # is outside this threshold, so they do not grow the box and they are
+    # not scan-match points. The 10:15 run at 25 m therefore stayed about
+    # 21 m wide in x and the step to x=18 was off the costmap. The 19:13
+    # run, with returns out to ~39 m, opened at 724 x 1483 and accepted
+    # (18, 0) through (46.8, -10). 39 m is still under the lidar max of
+    # 40, so those far beams are not dropped and are not drawn as walls.
+    # Do not publish a free beam at or under this value: equal enters the
+    # matcher, and anything shorter is an occupied cell.
     max_laser_range: 39.0
     minimum_time_interval: 0.5
     transform_timeout: 1.0
     tf_buffer_duration: 30.0
-    stack_size_to_use: 40000000
+    # 40 MB hits WSL soft ulimit -s (8192 KB) and can hang before
+    # "Using solver plugin". 8 MB skips that raise and still loads Ceres.
+    stack_size_to_use: 8388608
     enable_interactive_mode: true
     use_scan_matching: true
     # Barycenter pulls yaw when every return is on one side (the alpine).
@@ -48,7 +60,7 @@
     link_scan_maximum_distance: 3.0
     loop_search_maximum_distance: 3.0
     # Identical trunks were accepted as loop closures and folded the map
-    # (measured husky1 map to huskodom yaw about 134deg). Local matching
+    # (measured husky1_map -> husky1_odom yaw about 134°). Local matching
     # is enough for one pass up the corridor.
     do_loop_closing: false
     loop_match_minimum_chain_size: 10
@@ -62,14 +74,14 @@
     loop_search_space_resolution: 0.05
     loop_search_space_smear_deviation: 0.03
     distance_variance_penalty: 0.5
-    # ANGLE PENALTY GAIN is 0.2 and the old floor was 0.9, so a wrong yaw
+    # ANGLE_PENALTY_GAIN is 0.2 and the old floor was 0.9, so a wrong yaw
     # inside the search window lost almost no score. A tighter variance
     # and a lower floor make the odometry heading win a tie.
     angle_variance_penalty: 0.15
     fine_search_angle_offset: 0.00349
-    # Was +-20 deg, and response expansion added another 60 deg whenever
+    # Was ±20 deg, and response expansion added another 60 deg whenever
     # the score was zero. That is the yaw jump onto a repeated trunk.
-    # +-5 deg around the odometry heading, and no expansion.
+    # ±5 deg around the odometry heading, and no expansion.
     coarse_search_angle_offset: 0.0873
     coarse_angle_resolution: 0.0349
     minimum_angle_penalty: 0.2

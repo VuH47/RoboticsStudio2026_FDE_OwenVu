@@ -19,6 +19,35 @@
   gz_type_name: 'ignition.msgs.IMU'
   direction: GZ_TO_ROS
 
+# Base contact (ignition Contact system + bumper_contact sensor)
+- ros_topic_name: 'bumper_contact'
+  gz_topic_name: '/model/husky1/bumper_contact'
+  ros_type_name: 'ros_gz_interfaces/msg/Contacts'
+  gz_type_name: 'ignition.msgs.Contacts'
+  direction: GZ_TO_ROS
+
+# Wheel contacts. The front wheels hit a rock before the base box does.
+- ros_topic_name: 'front_left_contact'
+  gz_topic_name: '/model/husky1/front_left_contact'
+  ros_type_name: 'ros_gz_interfaces/msg/Contacts'
+  gz_type_name: 'ignition.msgs.Contacts'
+  direction: GZ_TO_ROS
+- ros_topic_name: 'front_right_contact'
+  gz_topic_name: '/model/husky1/front_right_contact'
+  ros_type_name: 'ros_gz_interfaces/msg/Contacts'
+  gz_type_name: 'ignition.msgs.Contacts'
+  direction: GZ_TO_ROS
+- ros_topic_name: 'rear_left_contact'
+  gz_topic_name: '/model/husky1/rear_left_contact'
+  ros_type_name: 'ros_gz_interfaces/msg/Contacts'
+  gz_type_name: 'ignition.msgs.Contacts'
+  direction: GZ_TO_ROS
+- ros_topic_name: 'rear_right_contact'
+  gz_topic_name: '/model/husky1/rear_right_contact'
+  ros_type_name: 'ros_gz_interfaces/msg/Contacts'
+  gz_type_name: 'ignition.msgs.Contacts'
+  direction: GZ_TO_ROS
+
 # Command velocity
 - ros_topic_name: 'cmd_vel'
   gz_topic_name: '/model/husky1/cmd_vel'

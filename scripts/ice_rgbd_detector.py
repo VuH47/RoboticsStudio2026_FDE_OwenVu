@@ -102,6 +102,10 @@ class IceRgbdDetector(Node):
         self.declare_parameter('min_ice_area_px', 35)
         self.declare_parameter('bare_cable_radius_m', CABLE_RADIUS)  # 0.17 m
         self.declare_parameter('min_bulge_radius_m', 0.20)          # >0.20 m verifies surface swelling
+        # Large sleeve is 0.45 m. A live return frame measured 0.64 m and
+        # was a real block. The blue disc was many metres, so 1.5 m still
+        # rejects that without dropping a noisy sleeve.
+        self.declare_parameter('max_bulge_radius_m', 1.50)
         self.declare_parameter('max_cable_proximity_m', 3.0)        # must be near cableway
         self.declare_parameter('min_cluster_points', 12)
         self.declare_parameter('camera_hfov_rad', 2.0944)           # 120 deg
@@ -125,6 +129,7 @@ class IceRgbdDetector(Node):
         self._reject_reason = 'no depth yet'
         self._confirmed_detections: List[Dict[str, Any]] = []
         self._last_json_save = 0.0
+        self._live_markers: set = set()
 
         # Subscriptions
         img_topic = str(self.get_parameter('camera_image_topic').value)
@@ -453,11 +458,16 @@ class IceRgbdDetector(Node):
         radial_dists = [min_cable_clearance(pt[0], pt[1], pt[2])[0] for pt in valid_world_pts]
         est_surface_radius = float(np.percentile(radial_dists, 75))
 
-        # Check if surface bulges above bare cable baseline
-        surface_going_up = est_surface_radius >= min_bulge_r
-
-        if not surface_going_up:
+        # Check if surface bulges above bare cable baseline, and is still
+        # a sleeve. A return-pass cloud can sit many metres off the cable
+        # while the centroid is close; that percentile would draw a huge disc.
+        max_bulge_r = float(self.get_parameter('max_bulge_radius_m').value)
+        if est_surface_radius < min_bulge_r:
             self._reject_reason = 'surface radius %.2f m is not above the bare cable' % est_surface_radius
+            return False, {}
+        if est_surface_radius > max_bulge_r:
+            self._reject_reason = (
+                'surface radius %.2f m is too large for an ice sleeve' % est_surface_radius)
             return False, {}
 
         conf = float(self.get_parameter('confidence_confirmed').value)
@@ -538,10 +548,12 @@ class IceRgbdDetector(Node):
     def _publish_markers(self, detections: List[Dict[str, Any]]) -> None:
         arr = MarkerArray()
         frame = str(self.get_parameter('target_frame').value)
+        max_r = float(self.get_parameter('max_bulge_radius_m').value)
+        used = set()
 
         for i, det in enumerate(detections):
             pos = det['position']
-            rad = det.get('estimated_radius', 0.32)
+            rad = min(float(det.get('estimated_radius', 0.32)), max_r)
 
             # Marker 1: Ice cylinder / sphere
             m_geo = Marker()
@@ -564,6 +576,7 @@ class IceRgbdDetector(Node):
             m_geo.color.b = 0.98
             m_geo.color.a = 0.85
             arr.markers.append(m_geo)
+            used.add((m_geo.ns, m_geo.id))
 
             # Marker 2: Text annotation
             m_txt = Marker()
@@ -583,6 +596,17 @@ class IceRgbdDetector(Node):
             m_txt.color.a = 1.0
             m_txt.text = f"CONFIRMED ICE ({det['span_id']}) r={rad:.2f}m"
             arr.markers.append(m_txt)
+            used.add((m_txt.ns, m_txt.id))
+
+        for ns, mid in self._live_markers - used:
+            stale = Marker()
+            stale.header.stamp = self.get_clock().now().to_msg()
+            stale.header.frame_id = frame
+            stale.ns = ns
+            stale.id = mid
+            stale.action = Marker.DELETE
+            arr.markers.append(stale)
+        self._live_markers = used
 
         self._mrk_pub.publish(arr)
 
@@ -615,15 +639,15 @@ class IceRgbdDetector(Node):
         # Banner at top
         banner_color = (0, 0, 200) if status == 'none' else ((0, 180, 255) if status == 'candidate' else (0, 220, 0))
         cv2.rectangle(annotated, (0, 0), (annotated.shape[1], 36), (20, 20, 20), -1)
-        cv2.putText(
-            annotated,
-            f"PERCEPTION: {status.upper()} | IN-RANGE (<=10m): {len(in_range_cands)} | TOTAL RGB: {len(candidates)}",
-            (12, 24),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.55,
-            banner_color,
-            2,
-        )
+        # # cv2.putText(
+        # #     annotated,
+        # #     f"PERCEPTION: {status.upper()} | IN-RANGE (<=10m): {len(in_range_cands)} | TOTAL RGB: {len(candidates)}",
+        # #     (12, 24),
+        # #     cv2.FONT_HERSHEY_SIMPLEX,
+        # #     0.55,
+        # #     banner_color,
+        # #     2,
+        # )
 
         for cand in candidates:
             is_conf = cand.get('confirmed', False)

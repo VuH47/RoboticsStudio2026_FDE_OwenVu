@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'scripts'))
 from husky_ice_vision_core import (  # noqa: E402
     VisionConfig, analyse_rgb_frame, multiframe_verdict, project_point,
     rotate_quaternion,

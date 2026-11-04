@@ -21,9 +21,11 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import rclpy
+from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import String
 
+from husky_detour import ROCK_GATES, blocked_notice, detour_notice, plan_around
 from ice_random_confirm import IceRandomConfirm, Phase
 from ice_target_tracker import (
     ACTIVE, CONFIRMED, INCONCLUSIVE, MISSED, NOT_CONFIRMED, TargetTracker)
@@ -48,6 +50,10 @@ class IcePerceptionConfirm(IceRandomConfirm):
         self._warmup_start: Optional[float] = None
         self._targets_pub = self.create_publisher(
             String, str(self.get_parameter('targets_topic').value), 10)
+        self._corridor_notice: Optional[str] = None
+        self._gates_passed: set = set()
+        self._sent_goal: Optional[Tuple[float, float, float]] = None
+        self._detour_retry = False
         self.create_timer(0.5, self._publish_targets)
         self.create_subscription(
             PoseStamped, '/fde/detection', self._on_detection, 10)
@@ -119,7 +125,7 @@ class IcePerceptionConfirm(IceRandomConfirm):
     def _lane_y(self) -> float:
         pose = self._husky_pose()
         hy = pose[1] if pose is not None else 0.0
-        return self._approach_y if hy < -2.0 else 0.0
+        return self._approach_y if (not self._use_visual and hy < -6.5) else 0.0
 
     def _husky_xy(self) -> Tuple[float, float]:
         pose = self._husky_pose()
@@ -153,6 +159,7 @@ class IcePerceptionConfirm(IceRandomConfirm):
                len(self._tracker.queue_order(
                    self._husky_xy(), self._lane_y(), True))))
         self._hover = None
+        self._detour_retry = False
         self._goals = self._goals_for(x)
         self._saw_in_camera = False
         self._goal_rejects = 0
@@ -160,8 +167,76 @@ class IcePerceptionConfirm(IceRandomConfirm):
         self._send_next_goal()
         return True
 
+    def _goals_for(self, ice_x: float) -> List[Tuple[float, float, float]]:
+        straight = super()._goals_for(ice_x)
+        pose = self._husky_pose()
+        start = (pose[0], pose[1]) if pose is not None else (0.0, 0.0)
+        routed = plan_around(
+            start, straight, ROCK_GATES, step=float(self._drive_step))
+        if routed != list(straight):
+            end = routed[-1] if routed else None
+            self.get_logger().info(
+                'Lane blocked. Another path to the same pose %s.'
+                % ('(%.1f, %.1f) yaw=%.2f' % end if end else 'none'))
+        return routed
+
+    def _send_next_goal(self) -> None:
+        if self._goals and not self._goal_inflight:
+            self._sent_goal = self._goals[0]
+        super()._send_next_goal()
+
+    def _on_goal_result(self, future) -> None:
+        try:
+            status = future.result().status
+        except Exception as exc:
+            self.get_logger().error('Nav2 result failed: %s' % exc)
+            self._goal_inflight = False
+            self._finish_confirm('navigation_failed' if self._use_visual else None)
+            return
+        sent = self._sent_goal
+        if (status != GoalStatus.STATUS_SUCCEEDED and not self._detour_retry
+                and sent is not None):
+            self._goal_inflight = False
+            self._detour_retry = True
+            pose = self._husky_pose()
+            start = (pose[0], pose[1]) if pose is not None else (sent[0], sent[1])
+            final_goal = self._goals[-1] if self._goals else sent
+            routed = plan_around(
+                start, [final_goal], ROCK_GATES,
+                step=float(self._drive_step), margin=2.0)
+            self._goals = routed
+            self.get_logger().info(
+                'Straight step rejected. Another path to the same pose '
+                '(%.1f, %.1f) yaw=%.2f.' % final_goal)
+            self._set_corridor('path blocked, driving around to the same pose')
+            self._send_next_goal()
+            return
+        super()._on_goal_result(future)
+
+    def _set_corridor(self, text: str) -> None:
+        if not text or text == self._corridor_notice:
+            return
+        self._corridor_notice = text
+        self.get_logger().info(text)
+
+    def _watch_rock_gates(self) -> None:
+        if self._phase not in (Phase.CONFIRM, Phase.ALIGN):
+            return
+        pose = self._husky_pose()
+        if pose is None:
+            return
+        notice = detour_notice(pose[0], pose[1])
+        if notice is None or notice in self._gates_passed:
+            return
+        self._gates_passed.add(notice)
+        self._set_corridor(notice)
+
     def _finish_confirm(self, outcome: Optional[str] = None) -> None:
+        if outcome == 'navigation_failed':
+            pose = self._husky_pose()
+            self._set_corridor(blocked_notice(pose[0] if pose is not None else None))
         active = self._active
+        evidence = (active or {}).get('visual_evidence') or {}
         super()._finish_confirm(outcome)
         if not self._concurrent or active is None or self._active is not None:
             return
@@ -174,6 +249,10 @@ class IcePerceptionConfirm(IceRandomConfirm):
             'inconclusive': INCONCLUSIVE,
         }.get(active.get('state'), MISSED)
         self._tracker.set_state(tid, state, active.get('state'))
+        if evidence.get('priority'):
+            self._tracker.set_priority(
+                tid, str(evidence['priority']),
+                evidence.get('priority_reason'))
 
     def _mission_summary(self) -> None:
         counts: Dict[str, int] = {}
@@ -184,6 +263,7 @@ class IcePerceptionConfirm(IceRandomConfirm):
             % (len(self._tracker.tracks), counts))
 
     def _tick(self) -> None:
+        self._watch_rock_gates()
         if self._phase == Phase.WAIT_TRUTH:
             if self._parrot_pose() is None:
                 return
@@ -216,7 +296,11 @@ class IcePerceptionConfirm(IceRandomConfirm):
                 'patrol_total': len(self._patrol),
                 'patrol_done': self._patrol_done(),
             },
-            'husky': {'phase': self._phase.name, 'active': active},
+            'husky': {
+                'phase': self._phase.name,
+                'active': active,
+                'corridor': self._corridor_notice,
+            },
             'targets': [],
         }
         for t in self._tracker.snapshot(self._husky_xy(), self._lane_y()):
@@ -233,7 +317,8 @@ def main(args: Optional[List[str]] = None) -> None:
     except KeyboardInterrupt:
         pass
     node.destroy_node()
-    rclpy.shutdown()
+    if rclpy.ok():
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':

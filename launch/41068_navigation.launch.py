@@ -3,7 +3,7 @@ from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDesc
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression, TextSubstitution
 from launch.conditions import IfCondition
-from launch_ros.actions import PushRosNamespace, SetRemap
+from launch_ros.actions import Node, PushRosNamespace, SetRemap
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -151,6 +151,16 @@ def generate_launch_description():
         # nav2_bringup's cmd_vel:=cmd_vel_nav. The smoother then subscribes to
         # the same topic it publishes and the last speed never times out.
         SetRemap(src='cmd_vel_smoothed', dst=cmd_vel_out),
+        Node(
+            package='41068_ignition_bringup',
+            executable='husky_bumper_stop.py',
+            name='husky_bumper_stop',
+            output='screen',
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'frame_id': PythonExpression(["'", namespace, "' + '_base_link'"]),
+            }],
+        ),
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(

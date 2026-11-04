@@ -196,6 +196,7 @@ DIM = (110, 110, 110)
 GREEN = (80, 200, 80)
 AMBER = (0, 190, 255)
 RED = (60, 60, 230)
+CRIMSON = (40, 40, 255)    # HIGH hazard, distinct from a plain confirm
 BLUE = (230, 160, 60)      # Parrot accent
 ORANGE = (60, 140, 255)    # Husky accent
 
@@ -316,6 +317,12 @@ def make_pane(image: Optional[np.ndarray], age_s: Optional[float], title: str,
 # ----------------------------------------------------------------- status UI
 def status_colour(status: str) -> Colour:
     s = (status or '').strip().lower()
+    if s == 'high':
+        return CRIMSON
+    if s == 'medium':
+        return AMBER
+    if s == 'low':
+        return GREY
     if s == 'confirmed':
         return GREEN
     if s == 'active':
@@ -355,6 +362,11 @@ def husky_card(result: Optional[dict], width: int) -> np.ndarray:
         return make_card(width, 'HUSKY  confirmation', 'STANDBY', GREY,
                          'No request yet', ORANGE)
     status = str(result.get('status', '?'))
+    priority = str(result.get('priority') or '')
+    if priority:
+        detail = '%s  %s' % (priority.upper(), result.get('priority_reason') or '')
+        return make_card(width, 'HUSKY  confirmation', priority.upper(),
+                         status_colour(priority), detail, ORANGE)
     detail = '%s   %s/%s positive frames' % (
         result.get('request_id', ''),
         result.get('positive_frames', '?'), result.get('valid_frames', '?'))
@@ -432,13 +444,19 @@ def make_targets_panel(width: int,
         state = str(tr.get('state', '')).upper()
         hits = f"{tr.get('n_hits', 0)} hits"
         dist = f"{tr.get('dist_m', 0.0):.1f}m"
-        col = status_colour(tr.get('state', ''))
+        priority = str(tr.get('priority') or '')
+        col = status_colour(priority or tr.get('state', ''))
 
         text(panel, tid, (18, y), 0.5, WHITE)
         text(panel, fit_text(span, 70, 0.45), (60, y), 0.45, GREY)
-        text(panel, fit_text(state, 90, 0.45), (145, y), 0.45, col)
-        text(panel, hits, (250, y), 0.45, DIM)
-        text(panel, dist, (320, y), 0.45, DIM)
+        if priority:
+            text(panel, fit_text(priority.upper(), 70, 0.45), (145, y), 0.45, col)
+            text(panel, fit_text(str(tr.get('priority_reason') or ''), width - 230, 0.4),
+                 (220, y), 0.4, DIM)
+        else:
+            text(panel, fit_text(state, 90, 0.45), (145, y), 0.45, col)
+            text(panel, hits, (250, y), 0.45, DIM)
+            text(panel, dist, (320, y), 0.45, DIM)
 
     return panel
 

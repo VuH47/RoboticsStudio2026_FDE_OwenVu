@@ -3,8 +3,8 @@
     frequency: 30.0
     # 3D so the filter keeps real z, roll and pitch on the snow ramp. With
     # two_d_mode: true the EKF forced z=0 and roll=pitch=0, so every consumer
-    # of /husky1/odom (ground_filter pitch compensation, TF, costmaps)
-    # believed the Husky was flat while it was ~4 m up.
+    # of /husky1/odom (scan_ground_filter pitch compensation, TF, costmaps)
+    # believed the Husky was flat while it was ~4 m up (Issue 44 / 45).
     two_d_mode: false
     publish_acceleration: false
     publish_tf: true
@@ -16,7 +16,7 @@
     # x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
     # Wheel/Gazebo odometry gives body-frame velocities only. vz is fused
     # (it is ~0 for a ground vehicle): with the IMU pitch below, z is then
-    # integrated as pitch instead of staying at zero.
+    # integrated as vx*sin(pitch) instead of staying at zero.
     odom0_config:
     - false
     - false

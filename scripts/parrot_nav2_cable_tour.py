@@ -9,7 +9,7 @@ Then:
   ros2 launch 41068_ignition_bringup parrot_nav2_cable_tour.launch.py
 
 Do not run Phase 1 parrot_cable_tour at the same time.
-Height is terrain hover only (not roof/cable z).
+Height is terrain hover only (not roof/cable z) — see Phase 2 design spec.
 """
 
 from __future__ import annotations

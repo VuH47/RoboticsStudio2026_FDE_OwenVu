@@ -27,6 +27,7 @@ install(
            scripts/husky_ice_inspect.py
            scripts/husky_nav2_cable_tour.py
            scripts/snow_rabbit_hopper.py
+           scripts/parrot_altitude_follow.py
            scripts/parrot_cable_tour.py
            scripts/parrot_full_cable_tour.py
            scripts/parrot_nav2_cable_tour.py
@@ -35,25 +36,22 @@ install(
            scripts/ice_unified_handoff.py
            scripts/ice_random_confirm.py
            scripts/ice_perception_confirm.py
+           scripts/husky_pin_view.py
+           scripts/husky_bumper_stop.py
+           scripts/husky_path_log.py
            scripts/unified_tf_bridge.py
            scripts/monotonic_clock.py
            scripts/ice_rgbd_detector.py
            scripts/save_slam_map.py
            scripts/husky_ice_vision_core.py
+           scripts/husky_ice_priority.py
+           scripts/husky_detour.py
            scripts/husky_ice_visual_confirm.py
-           test/test_husky_ice_visual_confirm.py
            scripts/detection_viewer.py
            scripts/detection_viewer_core.py
-           test/test_detection_viewer.py
-           test/test_husky_pose_correction.py
-           test/test_scan_ground_filter_pitch.py
-           test/ice_target_tracker.py
-           scripts/test_ice_target_tracker.py
-           scripts/parrot_altitude_follow.py
-           test/test_ice_rgbd_detector.py
+           scripts/ice_target_tracker.py
   DESTINATION lib/${PROJECT_NAME}
 )
-
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

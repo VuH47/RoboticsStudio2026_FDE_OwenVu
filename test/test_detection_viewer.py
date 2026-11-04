@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'scripts'))
 from detection_viewer_core import (  # noqa: E402
     AMBER, BLUE, GREEN, GREY, ORANGE, RED, TITLE_H, DashboardConfig, classify_frame,
     compose_dashboard, fit_pane, fit_text, husky_card, make_event_log,
@@ -50,6 +51,8 @@ def test_classify_frame():
 
 
 def test_status_colour_mapping():
+    assert status_colour('high') != GREEN
+    assert status_colour('high') != status_colour('confirmed')
     assert status_colour('confirmed') == GREEN
     assert status_colour('CONFIRMED') == GREEN
     assert status_colour('active') == ORANGE
@@ -126,6 +129,43 @@ def test_cards_render_for_every_state():
 def test_husky_card_tolerates_missing_fields():
     assert husky_card({'status': 'CONFIRMED'}, 300).shape[1] == 300
     assert husky_card({}, 300).shape[1] == 300
+
+
+def test_husky_card_priority_differs_from_plain_confirm():
+    plain = husky_card({
+        'status': 'CONFIRMED', 'request_id': 'a',
+        'positive_frames': 4, 'valid_frames': 5,
+    }, 480)
+    high = husky_card({
+        'status': 'CONFIRMED', 'priority': 'HIGH',
+        'priority_reason': (
+            'mid-span ice moves the cable centre of gravity off the towers'),
+    }, 480)
+    assert plain.shape == high.shape
+    assert not np.array_equal(plain, high)
+
+
+def test_target_row_shows_priority_without_changing_shape():
+    base = {
+        'parrot': {'patrol_index': 1, 'patrol_total': 3},
+        'husky': {'phase': 'CONFIRM', 'active': 'T01',
+                  'corridor': 'rock gate at x=32, passing south'},
+        'targets': [
+            {'id': 'T01', 'span': 'span_02', 'state': 'confirmed',
+             'n_hits': 5, 'dist_m': 12.3},
+        ],
+    }
+    plain = make_targets_panel(480, base)
+    ranked = make_targets_panel(480, {
+        **base,
+        'targets': [{
+            **base['targets'][0],
+            'priority': 'HIGH',
+            'priority_reason': 'mid-span ice moves the cable centre of gravity',
+        }],
+    })
+    assert plain.shape == ranked.shape == (130, 480, 3)
+    assert not np.array_equal(plain, ranked)
 
 
 def test_fit_text_never_overflows():

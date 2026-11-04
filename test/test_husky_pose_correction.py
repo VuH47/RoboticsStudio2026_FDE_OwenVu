@@ -19,6 +19,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'scripts'))
 from husky_ice_vision_core import (  # noqa: E402
     VisionConfig, analyse_rgb_frame, matrix_from_rpy, odometry_has_3d,
     project_point_with_pose, quaternion_to_matrix, quaternion_to_rpy,

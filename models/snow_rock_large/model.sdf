@@ -2,6 +2,9 @@
 <!--
   snow_rock_large — soft obstacle for snow_forest.
   Origin at ground contact, centred XY. Collision is a cheap box.
+  gpu_lidar does not hit collision. lidar_body repeats that box on
+  visibility bit 0x10000000 so the scan sees the solid before the bumper
+  does. The Gazebo window still draws the rock mesh.
 -->
 <sdf version="1.8">
   <model name="snow_rock_large">
@@ -13,6 +16,16 @@
           <mesh>
             <uri>model://snow_rock_large/meshes/snow_rock_large.obj</uri>
           </mesh>
+        </geometry>
+      </visual>
+      <visual name="lidar_body">
+        <pose>0 0 0.8 0 0 0</pose>
+        <cast_shadows>false</cast_shadows>
+        <visibility_flags>268435456</visibility_flags>
+        <geometry>
+          <box>
+            <size>2.4 2.4 1.6</size>
+          </box>
         </geometry>
       </visual>
       <collision name="collision">

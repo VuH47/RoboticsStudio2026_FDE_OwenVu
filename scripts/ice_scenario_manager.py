@@ -25,6 +25,13 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import (
+    DurabilityPolicy,
+    HistoryPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+)
+from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
 _SCRIPTS = Path(__file__).resolve().parent
@@ -110,6 +117,18 @@ class IceScenarioManager(Node):
         self._placed_ok = not bool(self.get_parameter("place_on_start").value)
         self._place_busy = False
         self._place_attempts = 0
+        # Latched so pin-view, which starts with Gazebo, still sees the
+        # place that finishes after the 15 s scenario timer.
+        self._placed_pub = self.create_publisher(
+            String,
+            "/ice/placed",
+            QoSProfile(
+                history=HistoryPolicy.KEEP_LAST,
+                depth=1,
+                reliability=ReliabilityPolicy.RELIABLE,
+                durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            ),
+        )
         if not self._placed_ok:
             # Gazebo's set_pose service is often down for the first seconds
             # of a combined launch. Keep trying instead of writing nothing
@@ -128,6 +147,7 @@ class IceScenarioManager(Node):
         if ok:
             self._placed_ok = True
             self.get_logger().info(msg)
+            self._placed_pub.publish(String(data=msg))
             return
         self.get_logger().warn(
             "Ice place attempt %d failed: %s" % (self._place_attempts, msg)
@@ -135,6 +155,7 @@ class IceScenarioManager(Node):
         if self._place_attempts >= 40:
             self._placed_ok = True
             self.get_logger().error("Giving up on ice placement after 40 attempts.")
+            self._placed_pub.publish(String(data="placement_failed"))
 
     def _on_reset(self, _req: Trigger.Request, resp: Trigger.Response):
         ok, msg = self.apply_scenario()

@@ -12,8 +12,22 @@ import math
 import rclpy
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import (
+    HistoryPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+    qos_profile_sensor_data,
+)
 from sensor_msgs.msg import LaserScan
+
+# Raw /scan stays sensor-data (best effort). Filtered output is RELIABLE so
+# slam_toolbox and any Reliable RViz/costmap subscriber still receive it.
+# Best-effort readers (Nav2 obstacle layer) can still match a Reliable writer.
+_SCAN_FILTERED_QOS = QoSProfile(
+    history=HistoryPolicy.KEEP_LAST,
+    depth=10,
+    reliability=ReliabilityPolicy.RELIABLE,
+)
 
 
 def _pitch_from_quat(q) -> float:
@@ -40,9 +54,9 @@ class ScanGroundFilter(Node):
 
         self.declare_parameter('road_gradient', 0.12)
         self.declare_parameter('height_tolerance', 0.25)
-        # Hits higher than this above wheel contact stay occupied (trees, towers).
-        # A widening slope cone alone treats distant lidar-height trunks as 3% grade.
-        self.declare_parameter('max_ground_height', 0.35)
+        # Hits higher than this above wheel contact stay occupied (trees, towers, rocks, bushes).
+        # Lowered from 0.35 to 0.20 so low obstacles (bushes, rocks) are preserved in scan_filtered.
+        self.declare_parameter('max_ground_height', 0.20)
         # Match husky.urdf.xacro base_scan joint (pitched up ~7 deg).
         self.declare_parameter('lidar_xyz', [0.0, 0.0, 0.85])
         self.declare_parameter('lidar_rpy', [0.0, -0.12, 0.0])
@@ -57,7 +71,7 @@ class ScanGroundFilter(Node):
         self.ground_z = float(self.get_parameter('ground_z').value)
         self._pitch = 0.0
 
-        self._pub = self.create_publisher(LaserScan, 'scan_filtered', qos_profile_sensor_data)
+        self._pub = self.create_publisher(LaserScan, 'scan_filtered', _SCAN_FILTERED_QOS)
         self.create_subscription(
             LaserScan, 'scan', self._on_scan, qos_profile_sensor_data)
         self.create_subscription(Odometry, 'odom', self._on_odom, 20)

@@ -151,7 +151,9 @@ MIN_SPACING_M: float = 3.0
 # Husky stays on the Nav2 ski corridor and yaws −Y toward the lift.
 HUSKY_INSPECT_Y: float = 0.0
 HUSKY_INSPECT_YAW: float = -math.pi / 2.0
-CABLE_ENVELOPE_Y: float = -12.0  # |y| < 12 is the drive lane; closer is a violation.
+# Option B empirical corridor: open snow tested to y ≈ -22.1 m; closer than -24.0 is a violation.
+CABLE_ENVELOPE_Y: float = -24.0
+
 
 
 def _require_span(span_id: str) -> Span:
@@ -505,7 +507,11 @@ def parrot_full_cable_tour_waypoints(
     # Downhill pass (reversed list, facing backward)
     for lbl, x, y, z in reversed(cable_waypoints):
         waypoints.append((lbl + "_down", x, y, z, return_yaw))
-            
+
+    # Stay at approach height until the roof edge. A direct drop to
+    # PARROT_CLIMB_Z crosses slam_tree_spawn_SE while still at roof height.
+    waypoints.append((
+        "return_high", roof_edge_x, roof_y, approach_z, return_yaw))
     waypoints.append(("return_roof_edge", roof_edge_x, roof_y, PARROT_CLIMB_Z, 0.0))
     waypoints.append(("return_roof_center", roof_x, roof_y, roof_z, 0.0))
     return waypoints

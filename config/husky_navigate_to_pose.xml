@@ -1,0 +1,27 @@
+<!--
+  Husky navigate-to-pose tree.
+  The stock Nav2 tree, on a failed plan, clears the entire global costmap
+  and tries again. That erases a rock the lidar just saw, so the next path
+  is a straight line through it. This tree keeps the obstacle and replans.
+  If the robot is already against something, it backs up once and tries
+  again. It does not spin in place and it does not wipe the map.
+-->
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="1" name="NavigateRecovery">
+      <PipelineSequence name="NavigateWithReplanning">
+        <RateController hz="1.0">
+          <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+        </RateController>
+        <FollowPath path="{path}" controller_id="FollowPath"/>
+      </PipelineSequence>
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <Sequence name="BackAway">
+          <BackUp backup_dist="0.40" backup_speed="0.15"/>
+          <Wait wait_duration="1.0"/>
+        </Sequence>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>

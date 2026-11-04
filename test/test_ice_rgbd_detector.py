@@ -26,7 +26,7 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 
-_SCRIPTS = Path(__file__).resolve().parent
+_SCRIPTS = Path(__file__).resolve().parent.parent / 'scripts'
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
@@ -117,9 +117,37 @@ def test_geometric_surface_verification():
     assert ice_bulge_detected, f"Failed: ice bulge not detected! est_r={ice_surface_r:.3f}m"
     assert dist_cable < 1.0, f"Failed: cable proximity test failed, dist={dist_cable:.2f}m"
     assert span_id == "span_01", f"Failed: expected span_01, got {span_id}"
+    # Same gate as ice_rgbd_detector max_bulge_radius_m. A real sleeve is
+    # 0.22-0.45 m; a noisy one measured 0.64 m. Many metres is the blue disc.
+    max_bulge_r = 1.50
+    assert min_bulge_r <= ice_surface_r <= max_bulge_r, (
+        f"Failed: 0.32 m sleeve outside [{min_bulge_r}, {max_bulge_r}], est={ice_surface_r}")
+    noisy_r = 0.64
+    noisy_pts = [(cx, cy + noisy_r, cz) for _ in range(8)]
+    noisy_surface_r = float(np.percentile(
+        [min_cable_clearance(p[0], p[1], p[2])[0] for p in noisy_pts], 75))
+    assert min_bulge_r <= noisy_surface_r <= max_bulge_r, (
+        f"Failed: 0.64 m sleeve rejected, est={noisy_surface_r}")
+    print(f"  [PASS] Noisy 0.64 m sleeve kept: est_r={noisy_surface_r:.2f}m")
     print(f"  [PASS] Iced cable points evaluated: est_r={ice_surface_r:.3f}m >= {min_bulge_r}m")
     print(f"         Surface elevation verified! Protrusion = +{ice_surface_r - CABLE_RADIUS:.2f}m above bare cable.")
     print(f"         Status promoted to CONFIRMED on {span_id} ({cable_id})")
+
+    # Case B2: return-pass scatter. Centroid can be near the cable while the
+    # 75th percentile clearance is many metres. That must not confirm.
+    scatter_r = 8.0
+    scatter_pts: List[Tuple[float, float, float]] = []
+    for theta in np.linspace(0, 2 * math.pi, 30):
+        scatter_pts.append((
+            cx,
+            cy + scatter_r * math.cos(theta),
+            cz + scatter_r * math.sin(theta),
+        ))
+    scatter_radii = [min_cable_clearance(p[0], p[1], p[2])[0] for p in scatter_pts]
+    scatter_surface_r = float(np.percentile(scatter_radii, 75))
+    assert scatter_surface_r > max_bulge_r, (
+        f"Failed: scatter radius {scatter_surface_r:.2f} m was not above {max_bulge_r} m")
+    print(f"  [PASS] Return-pass scatter rejected: est_r={scatter_surface_r:.2f}m > {max_bulge_r}m")
 
     # Case C: Out of corridor test (e.g. tree or ground point far from cable)
     far_x, far_y, far_z = 0.0, 0.0, 0.4

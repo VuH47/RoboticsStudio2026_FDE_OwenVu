@@ -3,9 +3,9 @@
 
 Proposal requirements this node covers:
 
- No intervention / dispatch without explicit operator approval.
-  Abort stops the current action and commands return-to-base.
- Publishes mission state + recommended action for the operator UI.
+  R7  No intervention / dispatch without explicit operator approval.
+  R8  Abort stops the current action and commands return-to-base.
+  R9  Publishes mission state + recommended action for the operator UI.
 
 The drone (or the demo_hazard_stub) publishes a target pose. This node
 holds that target in AWAIT_APPROVAL until the operator console fires

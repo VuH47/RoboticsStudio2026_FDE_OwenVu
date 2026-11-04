@@ -36,6 +36,7 @@ from tf2_ros import Buffer, TransformException, TransformListener
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
+from husky_ice_priority import judge_ice  # noqa: E402
 from husky_ice_vision_core import (  # noqa: E402
     VisionConfig, analyse_rgb_frame, multiframe_verdict, odometry_has_3d,
     project_point, project_point_with_pose, quaternion_to_rpy,
@@ -75,9 +76,11 @@ class HuskyVisualConfirm(Node):
         self._started = 0.0
         self._positive = 0
         self._valid_frames = 0
+        self._best_area_px = 0.0
         self._last_frame = None
         self._request_clock_ns = None
         self._last_debug = None
+        self._alert_banner = ''
         self._last_reason = 'no_camera_image'
         # Latest Husky height/tilt (from 3D odometry) and how the ROI was placed.
         self._pose_z: Optional[float] = None
@@ -105,7 +108,7 @@ class HuskyVisualConfirm(Node):
                                  self._on_pose_odom, qos_profile_sensor_data)
         self.create_timer(0.2, self._check_timeout)
         self.get_logger().info(
-            'Husky RGB visual confirmation ready (no ground-truth file access; '
+            'Husky RGB visual confirmation ready, no predata file access; '
             'slope compensation %s from %s).' % (
                 'ON' if bool(self.get_parameter('use_pose_correction').value) else 'OFF',
                 str(self.get_parameter('pose_odom_topic').value)))
@@ -114,7 +117,7 @@ class HuskyVisualConfirm(Node):
         self._camera_info = msg
 
     def _on_pose_odom(self, msg: Odometry) -> None:
-        """Remember the Husky's real height, roll and pitch (3D odometry)."""
+        """Save anf log the Husky's real height, roll and pitch (3D odometry)."""
         p, o = msg.pose.pose.position, msg.pose.pose.orientation
         try:
             roll, pitch, _yaw = quaternion_to_rpy((o.x, o.y, o.z, o.w))
@@ -188,9 +191,11 @@ class HuskyVisualConfirm(Node):
         if self._active is not None:
             self._finish('INCONCLUSIVE', 'superseded_by_next_request')
         self._active = {'request_id': request_id, 'frame_id': frame_id, 'position': position}
+        self._alert_banner = ''
         self._started = time.monotonic()
         self._positive = 0
         self._valid_frames = 0
+        self._best_area_px = 0.0
         self._last_frame = None
         self._request_clock_ns = self.get_clock().now().nanoseconds
         self._last_debug = None
@@ -200,11 +205,22 @@ class HuskyVisualConfirm(Node):
 
     def _on_image(self, msg: Image) -> None:
         if self._active is None:
-            # Standby feed so rqt_image_view always has an active live stream
+            # Standby feed so rqt_image_view always has an active live stream.
+            # After a confirm, keep the alert on the live image instead of
+            # wiping it back to STANDBY.
             try:
                 raw = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-                cv2.putText(raw, 'Husky VISUAL: [STANDBY - Waiting for confirm request]',
+                # if self._alert_banner:
+                #     cv2.rectangle(raw, (0, 0), (raw.shape[1], 28), (0, 80, 0), -1)
+                #     cv2.putText(raw, self._alert_banner,
+                #                 (8, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 0), 1)
+                # else:
+                #     cv2.putText(raw, 'Husky VISUAL: [STANDBY - Waiting for confirm request]',
+                #                 (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (200, 200, 200), 1)
+                ##############################
+                cv2.putText(raw, 'Status: Standby ',
                             (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (200, 200, 200), 1)
+                ###############################
                 out = self._bridge.cv2_to_imgmsg(raw, encoding='bgr8')
                 out.header = msg.header
                 self._debug_pub.publish(out)
@@ -300,6 +316,9 @@ class HuskyVisualConfirm(Node):
         if candidate:
             x, y, w, h = candidate['bbox']
             cv2.rectangle(debug, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            if result['positive']:
+                self._best_area_px = max(
+                    self._best_area_px, float(candidate['area_px']))
         overlay = 'Husky VISUAL %s %d/%d positive (%d/%d frames)' % (
             request['request_id'], self._positive, self._valid_frames,
             self._valid_frames, int(self.get_parameter('frames_required').value))
@@ -344,6 +363,20 @@ class HuskyVisualConfirm(Node):
             'pose_note': self._pose_note,
             'image_path': None,
         }
+        if status == 'CONFIRMED':
+            verdict = judge_ice(
+                req['position'], self._best_area_px, self._cfg.min_area_px)
+            if verdict is not None:
+                result['priority'] = verdict['priority']
+                result['priority_score'] = verdict['score']
+                result['priority_cases'] = verdict['cases']
+                result['priority_reason'] = verdict['reason']
+                result['span_id'] = verdict['span_id']
+                result['cable_id'] = verdict['cable_id']
+                result['t'] = verdict['t']
+                self._alert_banner = 'HUSKY DETECTED reported ice: %s  %s' % (
+                    verdict['priority'], verdict['reason'])
+                self.get_logger().info(self._alert_banner)
         try:
             self._output_dir.mkdir(parents=True, exist_ok=True)
             safe_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(req['request_id']))[:70]

@@ -323,7 +323,7 @@ class IceRandomConfirm(Node):
         hx = pose[0] if pose is not None else 0.0
         hy = pose[1] if pose is not None else 0.0
         face = -math.pi / 2.0
-        out_on_lane = hy < -2.0
+        out_on_lane = (not self._use_visual) and (hy < -6.5)
         lane_y = self._approach_y if out_on_lane else 0.0
         drive_yaw = 0.0 if ice_x >= hx else math.pi
         goals: List[Tuple[float, float, float]] = []
@@ -751,7 +751,8 @@ def main(args: Optional[List[str]] = None) -> None:
     except KeyboardInterrupt:
         pass
     node.destroy_node()
-    rclpy.shutdown()
+    if rclpy.ok():
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':

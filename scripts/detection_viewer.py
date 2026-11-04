@@ -1,7 +1,10 @@
-"""Combined Parrot + Husky detection  window (read-only viewer).
+#!/usr/bin/env python3
+"""Combined Parrot + Husky detection pop-up window (read-only viewer).
 
-Only subscribes; it never publishes and never reads ground
-truth.
+One OpenCV window, both robots side by side, status cards and an event log
+underneath. It only subscribes; it never publishes and never reads ground
+truth. RViz is left untouched and is not part of the client demo, so this is
+the view an operator console can later embed or replace.
 
 Subscribes:
   /fde/debug_image                 Parrot HSV blobs + depth check (ice_rgbd_detector)
@@ -41,7 +44,7 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 from detection_viewer_core import (  # noqa: E402
-    DashboardConfig, compose_dashboard, status_colour,
+    AMBER, DashboardConfig, compose_dashboard, status_colour,
 )
 
 
@@ -83,6 +86,7 @@ class DetectionViewer(Node):
         self._events: deque = deque(maxlen=50)
         self._last_parrot: Optional[str] = None
         self._last_husky: Optional[tuple] = None
+        self._last_corridor: Optional[str] = None
 
         self.create_subscription(
             Image, str(self.get_parameter('parrot_image_topic').value),
@@ -111,7 +115,7 @@ class DetectionViewer(Node):
     def _on_image(self, key: str, msg: Image) -> None:
         try:
             frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        except Exception as exc:  # noqa: BLE001 - never kill the viewer on a bad frame
+        except Exception as exc:  #never kill the viewer on a bad frame
             self.get_logger().warn('Bad %s frame: %s' % (key, exc), throttle_duration_sec=5.0)
             return
         with self._lock:
@@ -140,14 +144,22 @@ class DetectionViewer(Node):
         if isinstance(data, dict):
             with self._lock:
                 self._husky_result = data
-                key = (data.get('request_id'), data.get('status'))
+                key = (data.get('request_id'), data.get('status'),
+                       data.get('priority'))
                 if key != self._last_husky:
                     self._last_husky = key
                     st = str(data.get('status', '?'))
-                    self._log('HUSKY -> %s  %s  (%s/%s frames)' % (
-                        st.upper(), data.get('request_id', ''),
-                        data.get('positive_frames', '?'),
-                        data.get('valid_frames', '?')), status_colour(st))
+                    priority = data.get('priority')
+                    if priority:
+                        self._log('HUSKY %s  %s' % (
+                            str(priority).upper(),
+                            data.get('priority_reason') or ''),
+                            status_colour(str(priority)))
+                    else:
+                        self._log('HUSKY -> %s  %s  (%s/%s frames)' % (
+                            st.upper(), data.get('request_id', ''),
+                            data.get('positive_frames', '?'),
+                            data.get('valid_frames', '?')), status_colour(st))
 
     def _on_targets(self, msg: String) -> None:
         try:
@@ -160,6 +172,10 @@ class DetectionViewer(Node):
         with self._lock:
             self._targets_data = data
             self._targets_stamp = now
+            notice = (data.get('husky') or {}).get('corridor')
+            if notice and notice != self._last_corridor:
+                self._last_corridor = notice
+                self._log(str(notice), AMBER)
             for t in data.get('targets', []):
                 tid = t.get('id')
                 state = t.get('state')
@@ -209,6 +225,7 @@ class DetectionViewer(Node):
 
 def _window_closed(name: str) -> bool:
     """True once the user closes the window with the X button.
+
     The GTK OpenCV build under WSLg returns -1 for WND_PROP_VISIBLE even while
     the window is open, so use ASPECT_RATIO: positive while open, NaN once gone.
     """

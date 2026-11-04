@@ -44,9 +44,13 @@ bt_navigator:
     global_frame: husky1_map
     robot_base_frame: husky1_base_link
     odom_topic: odom
-    bt_loop_duration: 10
-    default_server_timeout: 20
-    wait_for_service_timeout: 1000
+    bt_loop_duration: 50
+    default_server_timeout: 2000
+    wait_for_service_timeout: 5000
+    # Default Nav2 tree clears the whole costmap when a plan fails, which
+    # deletes the rock and the robot then drives into it. This tree replans
+    # with the rock still on the map and only backs up.
+    default_nav_to_pose_bt_xml: "$(find-pkg-share 41068_ignition_bringup)/config/husky_navigate_to_pose.xml"
     plugin_lib_names:
     - nav2_compute_path_to_pose_action_bt_node
     - nav2_compute_path_through_poses_action_bt_node
@@ -117,7 +121,8 @@ controller_server:
     progress_checker:
       plugin: nav2_controller::SimpleProgressChecker
       required_movement_radius: 0.2
-      movement_time_allowance: 40.0
+      # Was 40 s: Husky ground into rocks for a long time before backup.
+      movement_time_allowance: 12.0
     general_goal_checker:
       stateful: true
       plugin: nav2_controller::SimpleGoalChecker
@@ -133,7 +138,7 @@ controller_server:
       max_vel_theta: 1.0
       min_speed_xy: 0.0
       max_speed_xy: 1.0
-      min_speed_theta: 0.0
+      min_speed_theta: 0.35
       acc_lim_x: 2.5
       acc_lim_y: 0.0
       acc_lim_theta: 3.2
@@ -160,15 +165,17 @@ controller_server:
       - PathAlign
       - PathDist
       - GoalDist
-      BaseObstacle.scale: 0.02
-      PathAlign.scale: 32.0
+      # BaseObstacle must beat PathAlign/PathDist or DWB hugs the polyline
+      # into a rock until "Failed to make progress". Issue 51/52 demo fix.
+      BaseObstacle.scale: 48.0
+      PathAlign.scale: 8.0
       PathAlign.forward_point_distance: 0.1
-      GoalAlign.scale: 32.0
+      GoalAlign.scale: 8.0
       GoalAlign.forward_point_distance: 0.1
-      PathDist.scale: 32.0
-      GoalDist.scale: 24.0
-      RotateToGoal.scale: 32.0
-      RotateToGoal.xy_goal_tolerance: 2.0
+      PathDist.scale: 8.0
+      GoalDist.scale: 12.0
+      RotateToGoal.scale: 12.0
+      RotateToGoal.xy_goal_tolerance: 1.0
       RotateToGoal.slowing_factor: 5.0
       RotateToGoal.lookahead_time: -1.0
 local_costmap:
@@ -190,12 +197,12 @@ local_costmap:
       - inflation_layer
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
-        cost_scaling_factor: 3.0
-        inflation_radius: 1.0
+        cost_scaling_factor: 1.8
+        inflation_radius: 1.60
       obstacle_layer:
         plugin: nav2_costmap_2d::ObstacleLayer
         enabled: true
-        observation_sources: scan_filtered
+        observation_sources: scan_filtered bumper_scan
         scan_filtered:
           topic: scan_filtered
           # Heights are measured in the costmap frame, i.e. WORLD z. The EKF is 3D now,
@@ -211,6 +218,17 @@ local_costmap:
           raytrace_min_range: 0.0
           obstacle_max_range: 12.0
           obstacle_min_range: 0.0
+        bumper_scan:
+          topic: bumper_scan
+          data_type: LaserScan
+          marking: true
+          clearing: true
+          min_obstacle_height: -2.0
+          max_obstacle_height: 50.0
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 2.0
+          obstacle_min_range: 0.2
       static_layer:
         plugin: nav2_costmap_2d::StaticLayer
         map_subscribe_transient_local: true
@@ -236,7 +254,7 @@ global_costmap:
       obstacle_layer:
         plugin: nav2_costmap_2d::ObstacleLayer
         enabled: true
-        observation_sources: scan_filtered
+        observation_sources: scan_filtered bumper_scan
         scan_filtered:
           topic: scan_filtered
           # Heights are measured in the costmap frame, i.e. WORLD z. The EKF is 3D now,
@@ -252,13 +270,24 @@ global_costmap:
           raytrace_min_range: 0.0
           obstacle_max_range: 25.0
           obstacle_min_range: 0.0
+        bumper_scan:
+          topic: bumper_scan
+          data_type: LaserScan
+          marking: true
+          clearing: true
+          min_obstacle_height: -2.0
+          max_obstacle_height: 50.0
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 2.0
+          obstacle_min_range: 0.2
       static_layer:
         plugin: nav2_costmap_2d::StaticLayer
         map_subscribe_transient_local: true
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
-        cost_scaling_factor: 3.0
-        inflation_radius: 1.0
+        cost_scaling_factor: 2.0
+        inflation_radius: 1.50
       always_send_full_costmap: true
 map_server:
   ros__parameters:
@@ -279,7 +308,10 @@ planner_server:
     - GridBased
     GridBased:
       plugin: nav2_navfn_planner/NavfnPlanner
-      tolerance: 2.0
+      # Issue 17. A wider search makes NavFn report a legal potential and
+      # then fail to trace the path. Blocked steps are routed around in
+      # husky_detour.py, so this stays at 2 m.
+      tolerance: 1.5 # old vals:2.0
       use_astar: true
       allow_unknown: true
 smoother_server:

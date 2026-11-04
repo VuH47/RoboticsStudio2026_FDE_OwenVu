@@ -2,6 +2,8 @@
 """Parrot short cable tour: spawn climb → deploy roof → span_01 view → roof.
 
 Prereq (sim running, NO slam/nav2 so altitude-follow is off):
+  ros2 launch 41068_ignition_bringup 41068_ignition_parrot.launch.py \\
+    world:=snow_forest rviz:=true
   # rabbits default False on parrot launch (avoids Gazebo Host unreachable).
 
 Then:

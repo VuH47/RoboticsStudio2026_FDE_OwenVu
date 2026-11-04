@@ -142,27 +142,27 @@ Visualization Manager:
     Axis: Z
     Channel Name: intensity
     Class: rviz_default_plugins/LaserScan
-    Color: 255; 255; 255
-    Color Transformer: Intensity
+    Color: 0; 255; 0
+    Color Transformer: FlatColor
     Decay Time: 0
-    Enabled: false
+    Enabled: true
     Max Color: 255; 255; 255
-    Max Intensity: 0
+    Max Intensity: 4096
     Min Color: 0; 0; 0
     Min Intensity: 0
-    Name: Lidar
+    Name: Lidar (scan_filtered)
     Position Transformer: XYZ
     Selectable: true
     Size (Pixels): 3
-    Size (m): 0.10000000149011612
+    Size (m): 0.08000000000000000
     Style: Flat Squares
     Topic:
       Depth: 5
       Durability Policy: Volatile
       Filter size: 10
       History Policy: Keep Last
-      Reliability Policy: Best Effort
-      Value: /husky1/scan
+      Reliability Policy: Reliable
+      Value: /husky1/scan_filtered
     Use Fixed Frame: true
     Use rainbow: true
     Value: true

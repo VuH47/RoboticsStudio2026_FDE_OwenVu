@@ -14,6 +14,9 @@ Run: python3 test_scan_ground_filter_pitch.py   (needs rclpy; run in WSL)
 
 import math
 import sys
+import os
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'scripts'))
 
 import scan_ground_filter as sgf
 

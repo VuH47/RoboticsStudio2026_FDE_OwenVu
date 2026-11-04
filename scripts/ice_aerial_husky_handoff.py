@@ -38,8 +38,10 @@ from ice_cable_geometry import (  # noqa: E402
     DEPLOY_ROOF_Z,
     DEPLOY_STATION_XY,
     husky_corridor_goal_for_ice_x,
-    parrot_ice_patrol_waypoints,
+    parrot_full_cable_tour_waypoints,
 )
+from visualization_msgs.msg import Marker, MarkerArray
+from geometry_msgs.msg import Point
 
 Waypoint = Tuple[str, float, float, float, float]
 
@@ -99,10 +101,12 @@ class IceAerialHuskyHandoff(Node):
         dx = float(self.get_parameter('deploy_x').value)
         dy = float(self.get_parameter('deploy_y').value)
         rz = float(self.get_parameter('roof_z').value)
-        self._patrol: List[Waypoint] = parrot_ice_patrol_waypoints(
-            deploy_xy=(dx, dy), roof_z=rz)
+        self._patrol: List[Waypoint] = parrot_full_cable_tour_waypoints(
+            spawn_xy=(dx, dy))
 
         self._cmd_pub = self.create_publisher(Twist, f'/{p_ns}/cmd_vel', 10)
+        self._marker_pub = self.create_publisher(MarkerArray, f'/{p_ns}/tour_markers', 10)
+        self.create_timer(0.5, self._publish_markers)
         self.create_subscription(
             Odometry,
             f'/{p_ns}/odometry',
@@ -145,6 +149,72 @@ class IceAerialHuskyHandoff(Node):
         if not blocks:
             return None
         return data
+
+    def _publish_markers(self) -> None:
+        if not self._patrol:
+            return
+        arr = MarkerArray()
+        
+        frame_id = self._parrot_odom.header.frame_id if self._parrot_odom else "parrot1_odom"
+        
+        path_marker = Marker()
+        path_marker.header.frame_id = frame_id
+        path_marker.header.stamp = self.get_clock().now().to_msg()
+        path_marker.ns = "tour_path"
+        path_marker.id = 0
+        path_marker.type = Marker.LINE_STRIP
+        path_marker.action = Marker.ADD
+        path_marker.pose.orientation.w = 1.0
+        path_marker.scale.x = 0.1 # line width
+        path_marker.color.r = 0.0
+        path_marker.color.g = 1.0
+        path_marker.color.b = 0.0
+        path_marker.color.a = 0.8
+        
+        for lbl, x, y, z, yaw in self._patrol:
+            p = Point(x=x, y=y, z=z)
+            path_marker.points.append(p)
+            
+        arr.markers.append(path_marker)
+        
+        for i, (lbl, x, y, z, yaw) in enumerate(self._patrol):
+            wp_marker = Marker()
+            wp_marker.header.frame_id = frame_id
+            wp_marker.header.stamp = path_marker.header.stamp
+            wp_marker.ns = "tour_waypoints"
+            wp_marker.id = i + 1
+            wp_marker.type = Marker.SPHERE
+            wp_marker.action = Marker.ADD
+            wp_marker.pose.position.x = x
+            wp_marker.pose.position.y = y
+            wp_marker.pose.position.z = z
+            wp_marker.pose.orientation.w = 1.0
+            wp_marker.scale.x = 0.5
+            wp_marker.scale.y = 0.5
+            wp_marker.scale.z = 0.5
+            
+            if i < self._patrol_index:
+                wp_marker.color.r = 0.5
+                wp_marker.color.g = 0.5
+                wp_marker.color.b = 0.5
+                wp_marker.color.a = 0.5
+            elif i == self._patrol_index:
+                wp_marker.color.r = 1.0
+                wp_marker.color.g = 0.0
+                wp_marker.color.b = 0.0
+                wp_marker.color.a = 1.0
+                wp_marker.scale.x = 0.8
+                wp_marker.scale.y = 0.8
+                wp_marker.scale.z = 0.8
+            else:
+                wp_marker.color.r = 0.0
+                wp_marker.color.g = 0.0
+                wp_marker.color.b = 1.0
+                wp_marker.color.a = 0.8
+            arr.markers.append(wp_marker)
+            
+        self._marker_pub.publish(arr)
+
 
     def _on_parrot_odom(self, msg: Odometry) -> None:
         self._parrot_odom = msg
@@ -215,26 +285,27 @@ class IceAerialHuskyHandoff(Node):
     def _detect_nearest_block(
         self,
     ) -> Optional[Dict[str, Any]]:
+        pose = self._parrot_pose()
+        if pose is None:
+            return None
+            
+        x, y, z, _ = pose
+        
+        # Override detect range to 8.0m so it actually has to fly directly over the ice to trigger
+        rng = 8.0
+
         # Prioritize real perception detection from ice_rgbd_detector
         if self._real_detection is not None:
-            pose = self._parrot_pose()
-            if pose is not None:
-                x, y, z, _ = pose
-                rx, ry, rz = self._real_detection['position']
-                dist = math.sqrt((x - rx) ** 2 + (y - ry) ** 2 + (z - rz) ** 2)
-                rng = float(self.get_parameter('detect_range_m').value)
-                if dist <= rng:
-                    return self._real_detection
+            rx, ry, _rz = self._real_detection['position']
+            dist = math.sqrt((x - rx) ** 2 + (y - ry) ** 2 + (z - _rz) ** 2)
+            if dist <= rng:
+                return self._real_detection
 
         if not bool(self.get_parameter('use_truth_detection').value):
             return None
         if self._truth is None:
             return None
-        pose = self._parrot_pose()
-        if pose is None:
-            return None
-        x, y, z, _ = pose
-        rng = float(self.get_parameter('detect_range_m').value)
+
         best = None
         best_d = rng
         for block in self._truth.get('blocks', []):
@@ -326,17 +397,13 @@ class IceAerialHuskyHandoff(Node):
             return
 
         if self._phase == Phase.PATROL:
-            if self._patrol_index >= len(self._patrol):
-                block = self._detect_nearest_block()
-                if block is None:
-                    self.get_logger().error('No ice block in detect range at view.')
-                    self._finish(False)
-                    return
+            block = self._detect_nearest_block()
+            if block is not None:
                 self._target_block = block
                 pos = block['position']
                 self.get_logger().info(
-                    'Detected %s at (%.2f, %.2f, %.2f) — hovering, dispatch Husky'
-                    % (block['id'], pos[0], pos[1], pos[2])
+                    'Detected ice at (%.2f, %.2f, %.2f) — hovering, dispatch Husky'
+                    % (pos[0], pos[1], pos[2])
                 )
                 pose = self._parrot_pose()
                 if pose is not None:
@@ -345,6 +412,11 @@ class IceAerialHuskyHandoff(Node):
                 gx, gy, gyaw = husky_corridor_goal_for_ice_x(pos[0])
                 self._send_husky_goal(gx, gy, gyaw)
                 self._phase = Phase.HUSKY_NAV
+                return
+
+            if self._patrol_index >= len(self._patrol):
+                self.get_logger().info('Completed full patrol without finding ice.')
+                self._finish(True)
                 return
 
             label, tx, ty, tz, tyaw = self._patrol[self._patrol_index]

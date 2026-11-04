@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Operator console for the Parrot + Husky ice inspection mission.
+"""Operator console (read-only) for the Parrot + Husky ice inspection mission.
 
 PySide6 GUI. ROS runs in a background executor thread and only fills a
 lock-protected state; the Qt timer reads snapshots at ~10 Hz. This node never
@@ -168,14 +168,20 @@ class RosState(Node):
         with self.lock:
             self.husky_result = data
             self.last_rx = time.monotonic()
-            key = (data.get('request_id'), data.get('status'))
+            key = (data.get('request_id'), data.get('status'), data.get('priority'))
             if key != self._last_husky:
                 self._last_husky = key
                 st = str(data.get('status', '?'))
-                self._log('HUSKY', '-> %s  %s  (%s/%s frames)' % (
-                    st.upper(), data.get('request_id', ''),
-                    data.get('positive_frames', '?'), data.get('valid_frames', '?')),
-                    state_colour(st))
+                priority = data.get('priority')
+                if st == 'CONFIRMED' and priority:
+                    self._log('HUSKY', 'DETECTED reported ice %s: %s' % (
+                        str(priority).upper(), data.get('priority_reason') or ''),
+                        '#ff4444' if str(priority).upper() == 'HIGH' else state_colour(st))
+                else:
+                    self._log('HUSKY', '-> %s  %s  (%s/%s frames)' % (
+                        st.upper(), data.get('request_id', ''),
+                        data.get('positive_frames', '?'), data.get('valid_frames', '?')),
+                        state_colour(st))
 
     def _on_targets(self, msg: String) -> None:
         try:
@@ -567,11 +573,18 @@ class Console(QtWidgets.QMainWindow):
             self.c_husky.set('STANDBY', GREY, 'No request yet')
         else:
             status = str(r.get('status', '?'))
+            priority = str(r.get('priority') or '')
             d = '%s   %s/%s positive frames' % (
                 r.get('request_id', ''), r.get('positive_frames', '?'), r.get('valid_frames', '?'))
-            if r.get('reason'):
-                d += '   (%s)' % r['reason']
-            self.c_husky.set(status.upper(), state_colour(status), d)
+            if priority:
+                d = '%s  %s' % (priority.upper(), r.get('priority_reason') or d)
+                self.c_husky.set(priority.upper(),
+                                 '#ff4444' if priority.upper() == 'HIGH' else state_colour(status),
+                                 d)
+            else:
+                if r.get('reason'):
+                    d += '   (%s)' % r['reason']
+                self.c_husky.set(status.upper(), state_colour(status), d)
 
         # header mission line, telemetry, map
         tg = s['targets']
@@ -594,6 +607,8 @@ class Console(QtWidgets.QMainWindow):
         self.queue.setRowCount(len(targets))
         for i, t in enumerate(targets):
             state = str(t.get('state', ''))
+            if t.get('priority'):
+                state = '%s %s' % (state, str(t.get('priority')).upper())
             hits = t.get('n_hits', t.get('hits', '-'))
             dist = t.get('dist_m', t.get('dist', t.get('distance')))
             pos = '(%.1f, %.1f, %.1f)' % (t.get('x', 0.0), t.get('y', 0.0), t.get('z', 0.0)) \

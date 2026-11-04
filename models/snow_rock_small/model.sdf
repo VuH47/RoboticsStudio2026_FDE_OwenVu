@@ -1,7 +1,11 @@
 <?xml version="1.0" ?>
 <!--
   snow_rock_small — soft obstacle for snow_forest.
-  Origin at ground contact, centred XY. Collision is a cheap box.
+  Origin at ground contact, centred XY. Collision is a cheap box
+  (top at z = 0.5 m). The Husky scan plane is at z = 0.85 m and pitched
+  up, so a lidar box that only copied the collision would still be missed.
+  lidar_body keeps the collision footprint and is tall enough to cross
+  that plane. Visibility bit 0x10000000. The window draws the mesh.
 -->
 <sdf version="1.8">
   <model name="snow_rock_small">
@@ -13,6 +17,16 @@
           <mesh>
             <uri>model://snow_rock_small/meshes/snow_rock_small.obj</uri>
           </mesh>
+        </geometry>
+      </visual>
+      <visual name="lidar_body">
+        <pose>0 0 0.7 0 0 0</pose>
+        <cast_shadows>false</cast_shadows>
+        <visibility_flags>268435456</visibility_flags>
+        <geometry>
+          <box>
+            <size>1.0 0.7 1.4</size>
+          </box>
         </geometry>
       </visual>
       <collision name="collision">

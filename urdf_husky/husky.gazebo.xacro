@@ -113,6 +113,8 @@
       <pose relative_to='${prefix}base_scan'>0 0 0 0 0 0</pose>
       <visualize>$(arg laser_visual)</visualize>
       <topic>model/${gz_model_name}/scan</topic>
+      <!-- Include bit 0x10000000 (lidar proxies hidden from the GUI camera). -->
+      <visibility_mask>4294967295</visibility_mask>
       <update_rate>3</update_rate>
       <gz_frame_id>${prefix}base_scan</gz_frame_id>
       <ray>
@@ -136,6 +138,40 @@
         </noise>
       </ray>
       <always_on>true</always_on>
+    </sensor>
+  </gazebo>
+
+  <!-- Wheels hit a rock before the base box does. Each wheel publishes
+       its own contact. Ground contacts are ignored by husky_bumper_stop. -->
+  <xacro:macro name="wheel_contact_sensor" params="wheel_id">
+    <gazebo reference="${prefix}${wheel_id}_wheel_link">
+      <sensor name="${wheel_id}_contact" type="contact">
+        <always_on>true</always_on>
+        <update_rate>20</update_rate>
+        <topic>model/${gz_model_name}/${wheel_id}_contact</topic>
+        <contact>
+          <collision>wheel_collision</collision>
+        </contact>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+  <xacro:wheel_contact_sensor wheel_id="front_left"/>
+  <xacro:wheel_contact_sensor wheel_id="front_right"/>
+  <xacro:wheel_contact_sensor wheel_id="rear_left"/>
+  <xacro:wheel_contact_sensor wheel_id="rear_right"/>
+
+  <!-- Base contact. Nav2 has no bumper; this is the stop signal when the
+       collision body is already touching and the scan has not marked it. -->
+  <gazebo reference="${prefix}base_link">
+    <sensor name="bumper_contact" type="contact">
+      <always_on>true</always_on>
+      <update_rate>20</update_rate>
+      <topic>model/${gz_model_name}/bumper_contact</topic>
+      <contact>
+        <collision>base_link_collision</collision>
+        <collision>base_link_collision_bottom</collision>
+        <collision>base_link_collision_1</collision>
+      </contact>
     </sensor>
   </gazebo>
 
@@ -178,11 +214,12 @@
   <gazebo reference="${prefix}camera_link">
     <sensor name="rgbd_camera" type="rgbd_camera">
       <camera>
-        <!-- 75-degree FOV provides robust coverage of overhead cables while keeping high resolution. -->
+        <!-- 75 deg FOV. 320x240 keeps WSL/software-GL RGBD cost down; confirm
+             still works (Issue 52). Raise only if evidence crops are too soft. -->
         <horizontal_fov>1.309</horizontal_fov>
         <image>
-          <width>480</width>
-          <height>360</height>
+          <width>320</width>
+          <height>240</height>
         </image>
         <clip>
           <near>0.1</near>

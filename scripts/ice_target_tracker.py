@@ -28,6 +28,8 @@ class Track:
         self.hits: List[Tuple[float, float, float, float]] = []
         self.state = TRACKING
         self.result: Optional[str] = None
+        self.priority: Optional[str] = None
+        self.priority_reason: Optional[str] = None
 
     def add(self, t: float, x: float, y: float, z: float) -> None:
         self.hits.append((t, x, y, z))
@@ -81,6 +83,14 @@ class TargetTracker:
             if tr.id == track_id:
                 return tr
         return None
+
+    def set_priority(self, track_id: str, priority: str,
+                     reason: Optional[str] = None) -> None:
+        """Record Husky's hazard judgement. Does not change visit order."""
+        tr = self.get(track_id)
+        if tr is not None:
+            tr.priority = priority
+            tr.priority_reason = reason
 
     def set_state(self, track_id: str, state: str,
                   result: Optional[str] = None) -> None:
@@ -138,6 +148,8 @@ class TargetTracker:
                 'dist_m': round(math.hypot(x - husky_xy[0],
                                            lane_y - husky_xy[1]), 1),
                 'result': tr.result,
+                'priority': tr.priority,
+                'priority_reason': tr.priority_reason,
             })
         return out
 
