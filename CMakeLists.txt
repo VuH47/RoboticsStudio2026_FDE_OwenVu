@@ -59,3 +59,19 @@ if(BUILD_TESTING)
 endif()
 
 ament_package()
+
+# Install Owen's operator GUI and supporting modules
+install(
+  PROGRAMS fde_gui/scripts/operator_gui.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  DIRECTORY fde_gui/operator_interface
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  DIRECTORY fde_gui/assets
+  DESTINATION lib/${PROJECT_NAME}
+)

@@ -1,0 +1,1067 @@
+/* =========================================================
+   GLOBAL
+   ========================================================= */
+
+QMainWindow {
+    background-color: #34465f;
+}
+
+QWidget {
+    color: white;
+    font-size: 13px;
+    font-family: Arial;
+}
+
+#mainPanel {
+    background-color: #273b55;
+    border-radius: 7px;
+}
+
+QFrame {
+    background-color: #273b55;
+    border-radius: 7px;
+}
+
+
+/* =========================================================
+   GENERAL BUTTONS
+   ========================================================= */
+
+QPushButton {
+    background-color: #35597d;
+    border: 1px solid #52769a;
+    border-radius: 5px;
+    padding: 7px;
+    font-weight: bold;
+}
+
+QPushButton:hover {
+    background-color: #47739d;
+}
+
+QPushButton:checked {
+    background-color: #1e789a;
+    border: 2px solid #ffc900;
+}
+
+#selectorButton {
+    font-size: 15px;
+}
+
+
+/* =========================================================
+   TABS
+   ========================================================= */
+
+QTabWidget::pane {
+    border: none;
+}
+
+QTabBar::tab {
+    background-color: #8a8987;
+    padding: 10px 25px;
+    margin-right: 2px;
+    font-size: 16px;
+}
+
+QTabBar::tab:selected {
+    background-color: #4b97d6;
+}
+
+
+/* =========================================================
+   COMBO BOX
+   ========================================================= */
+
+QComboBox {
+    background-color: #676c70;
+    border: 1px solid #dddddd;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+
+/* =========================================================
+   MAP
+   ========================================================= */
+
+#mapView {
+    background-color: white;
+    border: 2px solid #111111;
+    border-radius: 10px;
+}
+
+#mapView > QWidget {
+    background-color: transparent;
+    border-radius: 10px;
+}
+
+
+/* =========================================================
+   MAP LEGEND / WAYPOINT OVERLAY
+   ========================================================= */
+
+QFrame#mapLegend {
+    background-color: rgba(123, 126, 129, 170);
+    border: 2px solid #202020;
+    border-radius: 10px;
+}
+
+QFrame#mapLegend QStackedWidget {
+    background-color: transparent;
+    border: none;
+}
+
+
+/* =========================================================
+   LEGEND / WAYPOINT SELECTOR
+   ========================================================= */
+
+QPushButton#mapOverlayTab {
+    color: white;
+    background-color: #66696c;
+    border: 1px solid #303030;
+    border-radius: 2px;
+    padding: 3px 6px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+QPushButton#mapOverlayTab:hover {
+    background-color: #74777a;
+}
+
+QPushButton#mapOverlayTab:checked {
+    color: white;
+    background-color: #2994e6;
+    border: 1px solid #1675bd;
+}
+
+
+/* =========================================================
+   COLUMN HEADERS
+   ========================================================= */
+
+QLabel#legendColumnHeader {
+    color: white;
+    background-color: transparent;
+    border: none;
+    font-size: 9px;
+    font-weight: 700;
+}
+
+
+/* =========================================================
+   SECTION HEADER ROWS
+   ========================================================= */
+
+QWidget#legendSectionRow {
+    background-color: #686b6e;
+    border: none;
+    border-radius: 0px;
+}
+
+QLabel#legendSectionLabel {
+    color: white;
+    background-color: #686b6e;
+    border: none;
+    border-radius: 0px;
+    padding: 2px 4px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+
+/* =========================================================
+   LEGEND ITEM ROWS
+   ========================================================= */
+
+QWidget#legendItemRow {
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
+}
+
+QLabel#legendItemLabel {
+    color: white;
+    background-color: transparent;
+    border: none;
+    font-size: 9px;
+}
+
+
+/* =========================================================
+   LEGEND SYMBOL PLACEHOLDER
+   ========================================================= */
+
+QLabel#legendAssetPlaceholder {
+    color: white;
+    background-color: transparent;
+    border: none;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+
+/* =========================================================
+   LEGEND / WAYPOINT DIVIDING LINES
+   ========================================================= */
+
+QFrame#legendSeparator {
+    background-color: #353535;
+    border: none;
+    border-radius: 0px;
+    min-height: 1px;
+    max-height: 1px;
+}
+
+
+/* =========================================================
+   WAYPOINT ROWS
+   ========================================================= */
+
+QWidget#waypointRow {
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
+}
+
+QWidget#waypointRow QWidget {
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
+}
+
+QLabel#waypointTypeLabel {
+    color: white;
+    background-color: transparent;
+    border: none;
+    font-size: 9px;
+}
+
+
+/* =========================================================
+   WAYPOINT UP / DOWN BUTTONS
+   ========================================================= */
+
+QPushButton#waypointSmallButton {
+    color: white;
+    background-color: #686b6e;
+    border: 1px solid #55585b;
+    border-radius: 2px;
+    padding: 0px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+QPushButton#waypointSmallButton:hover {
+    background-color: #2994e6;
+    border: 1px solid #1675bd;
+}
+
+
+/* =========================================================
+   WAYPOINT DELETE BUTTON
+   ========================================================= */
+
+QPushButton#waypointDeleteButton {
+    color: #ffdddd;
+    background-color: #686b6e;
+    border: 1px solid #55585b;
+    border-radius: 2px;
+    padding: 0px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+QPushButton#waypointDeleteButton:hover {
+    color: white;
+    background-color: #b54a4a;
+    border: 1px solid #d35c5c;
+}
+
+
+/* =========================================================
+   SELECTED HAZARD OVERLAY
+   ========================================================= */
+
+QFrame#quickHazardPanel {
+    background-color: rgba(85, 85, 85, 235);
+    border: 2px solid #202020;
+    border-radius: 10px;
+}
+
+
+/* =========================================================
+   SELECTED HAZARD TITLE
+   ========================================================= */
+
+QLabel#quickTitle {
+    color: white;
+    background-color: transparent;
+    border: none;
+    font-size: 16px;
+    font-weight: 400;
+}
+
+
+/* =========================================================
+   SELECTED HAZARD ID
+   ========================================================= */
+
+QLabel#quickHazardId {
+    color: white;
+    background-color: transparent;
+    border: none;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+
+/* =========================================================
+   SELECTED HAZARD INFORMATION
+   ========================================================= */
+
+QLabel#quickHazardStatus,
+QLabel#quickHazardInfo,
+QLabel#quickEvidenceTitle {
+    color: white;
+    background-color: transparent;
+    border: none;
+    font-size: 12px;
+}
+
+
+/* =========================================================
+   SELECTED HAZARD SEPARATORS
+   ========================================================= */
+
+QFrame#quickHazardSeparator {
+    background-color: #d0d0d0;
+    border: none;
+    border-radius: 0px;
+    min-height: 1px;
+    max-height: 1px;
+}
+
+
+/* =========================================================
+   SELECTED HAZARD CLOSE BUTTON
+   ========================================================= */
+
+QPushButton#smallCloseButton {
+    color: white;
+    background-color: transparent;
+    border: 1px solid #dddddd;
+    border-radius: 10px;
+    padding: 0px;
+    font-size: 15px;
+    font-weight: 400;
+}
+
+QPushButton#smallCloseButton:hover {
+    background-color: #777777;
+}
+
+
+/* =========================================================
+   SELECTED HAZARD EVIDENCE
+   ========================================================= */
+
+QLabel#evidencePlaceholder {
+    color: black;
+    background-color: white;
+    border: 2px solid #18364d;
+    border-radius: 4px;
+}
+
+
+/* =========================================================
+   SELECTED HAZARD ACTION BUTTONS
+   ========================================================= */
+
+QFrame#quickHazardPanel QPushButton#hazardOverlayAction {
+    color: white;
+    background-color: #355f86;
+    border: 1px solid #52769a;
+    border-radius: 5px;
+    padding: 7px;
+    font-weight: 700;
+}
+
+QFrame#quickHazardPanel QPushButton#hazardOverlayAction:hover {
+    background-color: #47739d;
+}
+
+
+/* =========================================================
+   INFORMATION PANEL
+   ========================================================= */
+
+#infoPanel {
+    background-color: #202a36;
+    border: 2px solid #0f1114;
+}
+
+#sectionTitle {
+    font-size: 17px;
+}
+
+
+/* =========================================================
+   CAMERA
+   ========================================================= */
+
+#cameraFrame {
+    background-color: white;
+    border: 2px solid #111111;
+    border-radius: 10px;
+}
+
+#cameraPlaceholder {
+    color: black;
+    background-color: white;
+}
+
+#liveLabel {
+    color: #ff3030;
+    background-color: #777777;
+    border: 2px solid #111111;
+    border-radius: 5px;
+    padding: 5px 10px;
+    font-weight: bold;
+}
+
+#cameraBadge {
+    color: white;
+    background-color: #666666;
+    border: 2px solid #111111;
+    border-radius: 5px;
+    padding: 5px 16px;
+}
+
+#telemetryBadge {
+    color: white;
+    background-color: #5e5e5e;
+    border: 2px solid #111111;
+    border-radius: 5px;
+    padding: 4px 8px;
+}
+
+
+/* =========================================================
+   HAZARD LIST / DETAILS
+   ========================================================= */
+
+#hazardListPanel,
+#hazardDetailsPanel {
+    background-color: #223750;
+    border: 2px solid #111111;
+}
+
+#hazardStatusBadge {
+    font-weight: bold;
+}
+
+
+/* =========================================================
+   HAZARD EVIDENCE
+   ========================================================= */
+
+#photoPlaceholder {
+    background-color: white;
+    color: black;
+    border: 1px solid #cccccc;
+    min-height: 120px;
+}
+
+#evidenceTabs QTabBar::tab {
+    background-color: #777777;
+    padding: 5px 14px;
+    font-size: 12px;
+}
+
+#evidenceTabs QTabBar::tab:selected {
+    background-color: #4b97d6;
+}
+
+
+/* =========================================================
+   CONFIRM SAFE - GREEN
+   ========================================================= */
+
+QPushButton#confirmSafeAction {
+    color: #ffffff;
+    background-color: #285c3b;
+    border: 2px solid #25c968;
+    border-radius: 5px;
+    padding: 5px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QPushButton#confirmSafeAction:hover {
+    background-color: #34764d;
+    border: 2px solid #38e27d;
+}
+
+
+/* =========================================================
+   CONFIRM HAZARD - RED
+   ========================================================= */
+
+QPushButton#confirmHazardAction {
+    color: #ffffff;
+    background-color: #59272d;
+    border: 2px solid #e52b35;
+    border-radius: 5px;
+    padding: 5px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QPushButton#confirmHazardAction:hover {
+    background-color: #74323a;
+    border: 2px solid #ff414b;
+}
+
+
+/* =========================================================
+   SEND HUSKY - ORANGE
+   ========================================================= */
+
+QPushButton#primaryHazardAction[actionType="husky"] {
+    color: #ffffff;
+    background-color: #51413e;
+    border: 2px solid #f49a72;
+    border-radius: 5px;
+    padding: 5px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QPushButton#primaryHazardAction[actionType="husky"]:hover {
+    background-color: #66504a;
+    border: 2px solid #ffae87;
+}
+
+
+/* =========================================================
+   CANCEL ASSIGNMENT - RED / ORANGE
+   ========================================================= */
+
+QPushButton#primaryHazardAction[actionType="cancel"] {
+    color: #ffffff;
+    background-color: #59403a;
+    border: 2px solid #ef765f;
+    border-radius: 5px;
+    padding: 5px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QPushButton#primaryHazardAction[actionType="cancel"]:hover {
+    background-color: #704e46;
+    border: 2px solid #ff9178;
+}
+
+
+/* =========================================================
+   VIEW LIVE HUSKY - BLUE
+   ========================================================= */
+
+QPushButton#primaryHazardAction[actionType="live"] {
+    color: #ffffff;
+    background-color: #285f80;
+    border: 2px solid #299fe3;
+    border-radius: 5px;
+    padding: 5px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QPushButton#primaryHazardAction[actionType="live"]:hover {
+    background-color: #34779d;
+    border: 2px solid #45b3f2;
+}
+
+
+/* =========================================================
+   REOPEN HAZARD - BLUE
+   ========================================================= */
+
+QPushButton#primaryHazardAction[actionType="reopen"] {
+    color: #ffffff;
+    background-color: #1f6d91;
+    border: 2px solid #299fe3;
+    border-radius: 5px;
+    padding: 5px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QPushButton#primaryHazardAction[actionType="reopen"]:hover {
+    background-color: #287fa6;
+    border: 2px solid #48b5ed;
+}
+
+
+/* =========================================================
+   PRIMARY ACTION FALLBACK
+   ========================================================= */
+
+QPushButton#primaryHazardAction {
+    color: #ffffff;
+    background-color: #35597d;
+    border: 2px solid #52769a;
+    border-radius: 5px;
+    padding: 5px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+
+/* =========================================================
+   DISMISS HAZARD - NEUTRAL
+   ========================================================= */
+
+QPushButton#secondaryHazardAction {
+    color: #ffffff;
+    background-color: #3e4852;
+    border: 2px solid #15191d;
+    border-radius: 5px;
+    padding: 4px;
+    font-size: 14px;
+    font-weight: 400;
+}
+
+QPushButton#secondaryHazardAction:hover {
+    background-color: #505b66;
+    border: 2px solid #20262c;
+}
+
+
+/* =========================================================
+   MISSION CONTROLS
+   ========================================================= */
+
+#startButton {
+    background-color: #3ca826;
+    font-size: 17px;
+}
+
+#startButton:hover {
+    background-color: #48bf31;
+}
+
+#abortButton {
+    background-color: #ff1010;
+    font-size: 17px;
+}
+
+#abortButton:hover {
+    background-color: #d90000;
+}
+
+
+/* =========================================================
+   TEXT EDIT
+   ========================================================= */
+
+QTextEdit {
+    background-color: #20262d;
+    border: 1px solid #dddddd;
+    border-radius: 3px;
+}
+
+
+/* =========================================================
+   CHECK BOX
+   ========================================================= */
+
+QCheckBox {
+    spacing: 6px;
+}
+
+
+/* =========================================================
+   SCROLL AREAS
+   ========================================================= */
+
+QScrollArea {
+    background-color: transparent;
+    border: none;
+}
+
+QScrollArea > QWidget {
+    background-color: transparent;
+}
+
+QScrollArea > QWidget > QWidget {
+    background-color: transparent;
+}
+
+
+/* =========================================================
+   LEGEND / WAYPOINT SCROLLBARS
+   ========================================================= */
+
+QFrame#mapLegend QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+    margin: 2px 0px 2px 0px;
+    border: none;
+    border-radius: 3px;
+}
+
+QFrame#mapLegend QScrollBar::handle:vertical {
+    background-color: #c2c5c7;
+    min-height: 22px;
+    border: none;
+    border-radius: 3px;
+}
+
+QFrame#mapLegend QScrollBar::handle:vertical:hover {
+    background-color: #d5d7d8;
+}
+
+QFrame#mapLegend QScrollBar::handle:vertical:pressed {
+    background-color: #e1e3e4;
+}
+
+QFrame#mapLegend QScrollBar::add-line:vertical,
+QFrame#mapLegend QScrollBar::sub-line:vertical {
+    background: transparent;
+    border: none;
+    width: 0px;
+    height: 0px;
+    subcontrol-origin: margin;
+}
+
+QFrame#mapLegend QScrollBar::up-arrow:vertical,
+QFrame#mapLegend QScrollBar::down-arrow:vertical {
+    background: transparent;
+    width: 0px;
+    height: 0px;
+}
+
+QFrame#mapLegend QScrollBar::add-page:vertical,
+QFrame#mapLegend QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+
+QFrame#mapLegend QScrollBar:horizontal {
+    background: transparent;
+    height: 0px;
+    border: none;
+}
+
+
+/* =========================================================
+   MAP TOOL PANEL
+   ========================================================= */
+
+QFrame#mapToolPanel {
+    background-color: rgba(123, 126, 129, 170);
+    border: 2px solid #202020;
+    border-radius: 10px;
+}
+
+
+/* =========================================================
+   MAP TOOL BUTTONS
+   ========================================================= */
+
+QPushButton#mapToolButton {
+    color: white;
+    background-color: #686b6e;
+    border: 1px solid #55585b;
+    border-radius: 2px;
+    padding: 0px;
+    text-align: left;
+    outline: none;
+}
+
+QPushButton#mapToolButton:hover {
+    background-color: #74777a;
+    border: 1px solid #303030;
+}
+
+QPushButton#mapToolButton:checked {
+    color: white;
+    background-color: #2994e6;
+    border: 1px solid #1675bd;
+}
+
+QPushButton#mapToolButton:focus {
+    outline: none;
+}
+
+
+/* =========================================================
+   MAP TOOL TEXT
+   ========================================================= */
+
+QLabel#mapToolLabel {
+    color: white;
+    background-color: transparent;
+    border: none;
+    font-size: 9px;
+    font-weight: 700;
+}
+
+
+/* =========================================================
+   MAP TOOL IMAGE
+   ========================================================= */
+
+QLabel#mapToolImage {
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+}
+
+
+/* =========================================================
+   MISSION PROGRESS
+   ========================================================= */
+
+QWidget#missionProgress {
+    background-color: transparent;
+}
+
+QLabel#missionStageLabel {
+    color: white;
+    background-color: transparent;
+    border: none;
+    font-size: 12px;
+}
+
+
+/* =========================================================
+   MISSION STAGE CIRCLES
+   ========================================================= */
+
+QLabel#missionStageCircle {
+    color: white;
+    background-color: transparent;
+    border: 2px solid #d9d9d9;
+    border-radius: 18px;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+
+/* Pending */
+
+QLabel#missionStageCircle[stageState="pending"] {
+    color: white;
+    background-color: transparent;
+    border: 2px solid #d9d9d9;
+    border-radius: 18px;
+}
+
+
+/* Active */
+
+QLabel#missionStageCircle[stageState="active"] {
+    color: white;
+    background-color: #2994e6;
+    border: 2px solid white;
+    border-radius: 18px;
+}
+
+
+/* Complete */
+
+QLabel#missionStageCircle[stageState="complete"] {
+    color: white;
+    background-color: #49ad2f;
+    border: 2px solid white;
+    border-radius: 18px;
+}
+
+
+/* Skipped */
+
+QLabel#missionStageCircle[stageState="skipped"] {
+    color: white;
+    background-color: #686b6e;
+    border: 2px solid #aaaaaa;
+    border-radius: 18px;
+}
+
+
+/* =========================================================
+   MISSION CONNECTORS
+   ========================================================= */
+
+QFrame#missionStageConnector {
+    background-color: #d9d9d9;
+    border: none;
+    border-radius: 0px;
+    min-height: 3px;
+    max-height: 3px;
+}
+
+QFrame#missionStageConnector[stageState="complete"] {
+    background-color: #49ad2f;
+}
+
+QFrame#missionStageConnector[stageState="pending"] {
+    background-color: #d9d9d9;
+}
+
+
+/* =========================================================
+   MISSION INTERFACE TITLE
+   ========================================================= */
+
+QLabel#missionInterfaceTitle {
+    color: white;
+    background-color: transparent;
+    border: none;
+    font-size: 28px;
+    font-weight: 500;
+}
+
+
+/* =========================================================
+   DOCUMENTED HAZARD LIST - CARD DESIGN
+   ========================================================= */
+
+QFrame#hazardCard {
+    background-color: #242424;
+    border: 2px solid #111111;
+    border-radius: 10px;
+}
+
+QFrame#hazardCard:hover {
+    background-color: #2b2b2b;
+    border: 2px solid #48a6dc;
+}
+
+QFrame#hazardCard[selected="true"] {
+    background-color: #1f6d91;
+    border: 2px solid #48a6dc;
+    border-radius: 10px;
+}
+
+QFrame#hazardCard[selected="true"]:hover {
+    background-color: #1f6d91;
+    border: 2px solid #5db9ed;
+}
+
+QLabel#hazardCardId {
+    color: #ffffff;
+    background-color: transparent;
+    border: none;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QLabel#hazardCardType {
+    color: #ffffff;
+    background-color: transparent;
+    border: none;
+    font-size: 13px;
+    font-weight: 400;
+}
+
+QLabel#hazardCardDate {
+    color: #aeb7c2;
+    background-color: transparent;
+    border: none;
+    font-size: 12px;
+}
+
+QFrame#hazardCard[selected="true"] QLabel#hazardCardId,
+QFrame#hazardCard[selected="true"] QLabel#hazardCardType {
+    color: #ffffff;
+}
+
+QFrame#hazardCard[selected="true"] QLabel#hazardCardDate {
+    color: #c8d8e3;
+}
+
+QLabel#hazardStatusDot {
+    background-color: transparent;
+    border: none;
+}
+
+QLabel#hazardIconPlaceholder {
+    color: #ffffff;
+    background-color: transparent;
+    border: none;
+    font-weight: 700;
+}
+
+QLabel#hazardCardChevron {
+    color: #ffffff;
+    background-color: transparent;
+    border: none;
+    font-size: 34px;
+    font-weight: 300;
+}
+
+
+/* =========================================================
+   HAZARD FILTERS
+   ========================================================= */
+
+QComboBox#hazardFilter,
+QComboBox#hazardSortFilter {
+    background-color: #676c70;
+    border: 1px solid #dddddd;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+QPushButton#clearHazardFilters {
+    background-color: #35597d;
+    border: 1px solid #52769a;
+    border-radius: 5px;
+    padding: 5px 8px;
+    font-weight: 700;
+}
+
+QPushButton#clearHazardFilters:hover {
+    background-color: #47739d;
+}
+
+QLabel#hazardFilterLabel {
+    color: #ffffff;
+    background-color: transparent;
+    border: none;
+}
+
+QWidget#hazardListScrollContent {
+    background-color: transparent;
+}
+
+QScrollArea#hazardListScroll {
+    background-color: transparent;
+    border: none;
+}
+
+/* =========================================================
+   SLIDING SIDEBAR TOGGLE - ORIGINAL COLOURS PRESERVED
+   ========================================================= */
+
+QPushButton#mapSidebarToggle {
+    color: white;
+    background-color: #35597d;
+    border: 1px solid #52769a;
+    border-radius: 7px;
+    padding: 0px;
+    font-size: 15px;
+    font-weight: bold;
+}
+
+QPushButton#mapSidebarToggle:hover {
+    background-color: #47739d;
+}
+
+QPushButton#mapSidebarToggle:pressed {
+    background-color: #1e789a;
+}
