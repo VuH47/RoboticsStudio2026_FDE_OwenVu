@@ -110,12 +110,12 @@ class HuskyPathLog(Node):
 
 
 def _default_output_root() -> str:
-    windows = (
-        '/mnt/c/Users/Asus/Downloads/41068RoboticsStudio1pring2026/'
-        '41068_ignition_bringup_v1/41068_ignition_bringup/image/path_log'
-    )
-    if os.path.isdir(os.path.dirname(windows)):
-        return windows
+    """Save inside the package's image/path_log directory portably."""
+    from pathlib import Path
+    pkg_root = Path(__file__).resolve().parent.parent
+    candidate = pkg_root / 'image' / 'path_log'
+    if (pkg_root / 'image').exists():
+        return str(candidate)
     return os.path.join(os.getcwd(), 'image', 'path_log')
 
 
