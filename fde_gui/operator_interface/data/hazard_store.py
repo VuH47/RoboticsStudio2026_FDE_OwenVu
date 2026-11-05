@@ -344,3 +344,13 @@ class HazardStore(QObject):
         self.hazard_changed.emit(
             hazard_id
         )
+
+    # =============================================================
+    # CLEAR ALL
+    # =============================================================
+
+    def clear_all(self):
+        """Clear all hazards in database and local cache."""
+        self.database.clear_all()
+        self.hazards.clear()
+        self.hazards_changed.emit()

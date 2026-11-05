@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from nav_msgs.msg import Odometry
 
 
@@ -15,14 +16,14 @@ class RobotPoseSubscriber(Node):
             Odometry,
             "/husky1/odometry",
             lambda msg: self.on_odometry("husky1", msg),
-            10,
+            qos_profile_sensor_data,
         )
 
         self.create_subscription(
             Odometry,
             "/parrot1/odometry",
             lambda msg: self.on_odometry("parrot1", msg),
-            10,
+            qos_profile_sensor_data,
         )
 
     def on_odometry(self, robot_name, msg):

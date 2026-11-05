@@ -18,11 +18,19 @@ if (CURRENT_DIR / "operator_interface").exists():
 else:
     PACKAGE_ROOT = source_package_root
 sys.path.insert(0, str(PACKAGE_ROOT))
+import time
+import math
 from operator_interface.data.ros_target_sync import RosTargetSync
 import rclpy
+from rclpy.qos import qos_profile_sensor_data
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Image
+from visualization_msgs.msg import Marker, MarkerArray
 from PySide6.QtGui import QImage
+try:
+    from cv_bridge import CvBridge
+except ImportError:
+    CvBridge = None
 from rclpy.node import Node
 from PySide6.QtCore import Qt, Signal, QPointF
 from std_msgs.msg import String
@@ -96,6 +104,11 @@ class OperatorRosNode(Node):
             "/fde/mission_command",
             10,
         )
+        self.marker_pub = self.create_publisher(
+            MarkerArray,
+            "/fde/markers",
+            10,
+        )
         self.create_subscription(
             String,
             "/fde/mission_state",
@@ -131,6 +144,14 @@ class OperatorRosNode(Node):
 
         if self.targets_callback_gui is not None:
             self.targets_callback_gui(data)
+
+    def clear_markers(self):
+        arr = MarkerArray()
+        stale = Marker()
+        stale.action = Marker.DELETEALL
+        arr.markers.append(stale)
+        self.marker_pub.publish(arr)
+        self.get_logger().info("Dispatched Marker.DELETEALL on /fde/markers")
 
     def send_command(self, command):
         msg = String()
@@ -216,6 +237,10 @@ class OperatorGUI(QMainWindow):
         self.database = MissionDatabase()
 
         self.hazard_store = HazardStore(self.database)
+
+        # Clear stale records and markers from previous runs so every launch starts clean
+        self.hazard_store.clear_all()
+        self.ros_node.clear_markers()
 
         self.mission_run_id = os.environ.get(
             "FDE_MISSION_RUN_ID"
@@ -341,7 +366,7 @@ class OperatorGUI(QMainWindow):
         commands = QHBoxLayout()
         self.start_button = QPushButton("Start Mission")
         self.start_button.setObjectName("startButton")
-        self.start_button.clicked.connect(lambda: self.ros_node.send_command("start"))
+        self.start_button.clicked.connect(self.on_start_mission)
         self.abort_button = QPushButton("Return Home / Abort")
         self.abort_button.setObjectName("abortButton")
         self.abort_button.clicked.connect(lambda: self.ros_node.send_command("abort"))
@@ -349,6 +374,13 @@ class OperatorGUI(QMainWindow):
         commands.addWidget(self.abort_button)
         layout.addLayout(commands)
         return panel
+
+    def on_start_mission(self):
+        if hasattr(self, "hazard_store"):
+            self.hazard_store.clear_all()
+        if hasattr(self, "ros_node"):
+            self.ros_node.clear_markers()
+            self.ros_node.send_command("start")
 
     def refresh_map_overlays(self):
         """Keep floating GUI panels above all SVG markers and number labels."""
@@ -708,33 +740,48 @@ class OperatorGUI(QMainWindow):
     # =====================================================
     def create_live_tab(self):
         self.live_operations = LiveOperations()
+        self._cv_bridge = CvBridge() if CvBridge else None
+        self.last_drone_debug_time = 0.0
+        self.last_husky_debug_time = 0.0
 
+        # Husky camera: listen to confirm debug video and fallback to raw camera
+        self.husky_debug_sub = self.ros_node.create_subscription(
+            Image,
+            "/husky1/ice_confirm/debug_image",
+            self.husky_debug_camera_callback,
+            qos_profile_sensor_data,
+        )
         self.husky_camera_sub = self.ros_node.create_subscription(
             Image,
             "/husky1/camera/image",
             self.husky_camera_callback,
-            10,
+            qos_profile_sensor_data,
         )
-
         self.husky_odom_sub = self.ros_node.create_subscription(
             Odometry,
             "/husky1/odometry",
             self.husky_odometry_callback,
-            10,
+            qos_profile_sensor_data,
         )
 
-        self.drone_camera_sub = self.ros_node.create_subscription(
+        # Drone camera: listen to detector debug video and fallback to raw camera
+        self.drone_debug_sub = self.ros_node.create_subscription(
             Image,
             "/fde/debug_image",
-            self.drone_camera_callback,
-            10,
+            self.drone_debug_camera_callback,
+            qos_profile_sensor_data,
         )
-
+        self.drone_raw_sub = self.ros_node.create_subscription(
+            Image,
+            "/parrot1/camera/image",
+            self.drone_raw_camera_callback,
+            qos_profile_sensor_data,
+        )
         self.drone_odom_sub = self.ros_node.create_subscription(
             Odometry,
             "/parrot1/odometry",
             self.drone_odometry_callback,
-            10,
+            qos_profile_sensor_data,
         )
 
         return self.live_operations
@@ -763,11 +810,14 @@ class OperatorGUI(QMainWindow):
     # ROS
     # =====================================================
     def process_ros(self):
-        rclpy.spin_once(self.ros_node, timeout_sec=0)
+        for _ in range(5):
+            rclpy.spin_once(self.ros_node, timeout_sec=0)
         self.setWindowTitle(
             "FDE Alpine Hazard Inspection"
             f" — {self.ros_node.mission_state}"
         )
+        if hasattr(self, "live_operations"):
+            self.live_operations.update_timestamp()
     def append_log(self, text):
         if hasattr(self, "live_operations"):
             self.live_operations.append_log(text)
@@ -826,33 +876,56 @@ class OperatorGUI(QMainWindow):
         with open(theme_path, "r", encoding="utf-8") as file:
             self.setStyleSheet(file.read())
 
+    def _imgmsg_to_qimage(self, msg):
+        try:
+            if not msg or not msg.data or msg.width <= 0 or msg.height <= 0:
+                return None
+            import numpy as np
+            raw = np.frombuffer(msg.data, dtype=np.uint8)
+            encoding = str(getattr(msg, "encoding", "") or "").lower()
+            if "bgr8" in encoding:
+                rgb = np.ascontiguousarray(raw.reshape((msg.height, msg.width, 3))[:, :, ::-1])
+                return QImage(rgb.data, msg.width, msg.height, 3 * msg.width, QImage.Format_RGB888).copy()
+            elif "rgb8" in encoding:
+                rgb = np.ascontiguousarray(raw.reshape((msg.height, msg.width, 3)))
+                return QImage(rgb.data, msg.width, msg.height, 3 * msg.width, QImage.Format_RGB888).copy()
+            elif "bgra8" in encoding:
+                rgba = np.ascontiguousarray(raw.reshape((msg.height, msg.width, 4))[:, :, [2, 1, 0, 3]])
+                return QImage(rgba.data, msg.width, msg.height, 4 * msg.width, QImage.Format_RGBA8888).copy()
+            elif "rgba8" in encoding:
+                rgba = np.ascontiguousarray(raw.reshape((msg.height, msg.width, 4)))
+                return QImage(rgba.data, msg.width, msg.height, 4 * msg.width, QImage.Format_RGBA8888).copy()
+            elif "mono8" in encoding or "8uc1" in encoding:
+                mono = np.ascontiguousarray(raw.reshape((msg.height, msg.width)))
+                return QImage(mono.data, msg.width, msg.height, msg.width, QImage.Format_Grayscale8).copy()
+            else:
+                return QImage(bytes(msg.data), msg.width, msg.height, msg.step, QImage.Format_RGB888).copy()
+        except Exception:
+            return None
+
+    def husky_debug_camera_callback(self, msg):
+        self.last_husky_debug_time = time.monotonic()
+        img = self._imgmsg_to_qimage(msg)
+        if img is not None:
+            self.live_operations.update_husky_camera(img)
+
     def husky_camera_callback(self, msg):
+        if time.monotonic() - getattr(self, "last_husky_debug_time", 0.0) > 1.5:
+            img = self._imgmsg_to_qimage(msg)
+            if img is not None:
+                self.live_operations.update_husky_camera(img)
 
-        image = QImage(
-            msg.data,
-            msg.width,
-            msg.height,
-            msg.step,
-            QImage.Format_RGB888,
-        ).copy()
+    def drone_debug_camera_callback(self, msg):
+        self.last_drone_debug_time = time.monotonic()
+        img = self._imgmsg_to_qimage(msg)
+        if img is not None:
+            self.live_operations.update_drone_camera(img)
 
-        self.live_operations.update_husky_camera(
-            image
-        )
-
-    def drone_camera_callback(self, msg):
-
-        image = QImage(
-            msg.data,
-            msg.width,
-            msg.height,
-            msg.step,
-            QImage.Format_RGB888,
-        ).copy()
-
-        self.live_operations.update_drone_camera(
-            image
-        )
+    def drone_raw_camera_callback(self, msg):
+        if time.monotonic() - getattr(self, "last_drone_debug_time", 0.0) > 1.5:
+            img = self._imgmsg_to_qimage(msg)
+            if img is not None:
+                self.live_operations.update_drone_camera(img)
 
     def quaternion_to_heading(self, orientation):
 

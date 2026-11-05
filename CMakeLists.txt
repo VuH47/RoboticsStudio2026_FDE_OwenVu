@@ -58,8 +58,6 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-ament_package()
-
 # Install Owen's operator GUI and supporting modules
 install(
   PROGRAMS fde_gui/scripts/operator_gui.py
@@ -75,3 +73,5 @@ install(
   DIRECTORY fde_gui/assets
   DESTINATION lib/${PROJECT_NAME}
 )
+
+ament_package()

@@ -108,6 +108,7 @@ def _default_output_root() -> str:
 
 
 import json
+import os
 from datetime import datetime
 
 import rclpy

@@ -388,6 +388,12 @@ class HuskyPinView(Node):
         self._cmd = self.create_publisher(Twist, '/parrot1/cmd_vel', 10)
         self._husky_cmd = self.create_publisher(Twist, '/husky1/cmd_vel', 10)
         self._pins = self.create_publisher(MarkerArray, '/parrot1/tour_markers', 10)
+        # Flush stale tour/pin markers in RViz on launch
+        del_pins = MarkerArray()
+        del_p = Marker()
+        del_p.action = Marker.DELETEALL
+        del_pins.markers.append(del_p)
+        self._pins.publish(del_pins)
         self._targets = self.create_publisher(String, '/fde/ice_targets', 10)
         self._ask = self.create_publisher(String, '/husky1/ice_confirm/request', 10)
         self._nav = ActionClient(self, NavigateToPose, '/husky1/navigate_to_pose')

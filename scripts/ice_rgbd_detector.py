@@ -151,6 +151,12 @@ class IceRgbdDetector(Node):
         self._det_pub = self.create_publisher(PoseStamped, det_topic, 10)
         self._stat_pub = self.create_publisher(String, stat_topic, 10)
         self._mrk_pub = self.create_publisher(MarkerArray, mrk_topic, 10)
+        # Flush stale markers in RViz on launch
+        del_arr = MarkerArray()
+        del_m = Marker()
+        del_m.action = Marker.DELETEALL
+        del_arr.markers.append(del_m)
+        self._mrk_pub.publish(del_arr)
         self._dbg_pub = self.create_publisher(Image, dbg_topic, 10)
 
         # Compatibility with mission_gate / UI

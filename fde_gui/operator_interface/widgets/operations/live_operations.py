@@ -469,48 +469,74 @@ class LiveOperations(QWidget):
         )
 
     def update_husky_camera(self, image):
-
+        if image is None:
+            return
         pixmap = QPixmap.fromImage(image)
+        if pixmap.isNull():
+            return
 
         # Husky-only view
-        self.husky_camera.camera_title.setPixmap(
-            pixmap.scaled(
-                self.husky_camera.camera_title.size(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
+        sz = self.husky_camera.camera_title.size()
+        if sz.width() > 10 and sz.height() > 10:
+            self.husky_camera.camera_title.setPixmap(
+                pixmap.scaled(
+                    sz,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
             )
-        )
 
         # Husky camera in Both view
-        self.both_husky_camera.camera_title.setPixmap(
-            pixmap.scaled(
-                self.both_husky_camera.camera_title.size(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
+        sz_both = self.both_husky_camera.camera_title.size()
+        if sz_both.width() > 10 and sz_both.height() > 10:
+            self.both_husky_camera.camera_title.setPixmap(
+                pixmap.scaled(
+                    sz_both,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
             )
-        )
 
     def update_drone_camera(self, image):
-
+        if image is None:
+            return
         pixmap = QPixmap.fromImage(image)
+        if pixmap.isNull():
+            return
 
         # Drone-only view
-        self.drone_camera.camera_title.setPixmap(
-            pixmap.scaled(
-                self.drone_camera.camera_title.size(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
+        sz = self.drone_camera.camera_title.size()
+        if sz.width() > 10 and sz.height() > 10:
+            self.drone_camera.camera_title.setPixmap(
+                pixmap.scaled(
+                    sz,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
             )
-        )
 
         # Drone feed in Both view
-        self.both_drone_camera.camera_title.setPixmap(
-            pixmap.scaled(
-                self.both_drone_camera.camera_title.size(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
+        sz_both = self.both_drone_camera.camera_title.size()
+        if sz_both.width() > 10 and sz_both.height() > 10:
+            self.both_drone_camera.camera_title.setPixmap(
+                pixmap.scaled(
+                    sz_both,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
             )
-        )
+
+    def update_timestamp(self):
+        import time
+        now_str = time.strftime("%d %b %Y %H:%M:%S")
+        for cam in (
+            getattr(self, "drone_camera", None),
+            getattr(self, "husky_camera", None),
+            getattr(self, "both_drone_camera", None),
+            getattr(self, "both_husky_camera", None),
+        ):
+            if cam is not None and hasattr(cam, "timestamp_label"):
+                cam.timestamp_label.setText(now_str)
 
     def update_husky_telemetry(
         self,

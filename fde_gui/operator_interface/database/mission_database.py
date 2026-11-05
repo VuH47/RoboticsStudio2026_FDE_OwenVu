@@ -618,6 +618,18 @@ class MissionDatabase:
         return cursor.fetchall()
 
     # =============================================================
+    # CLEAR ALL
+    # =============================================================
+
+    def clear_all(self):
+        """Delete all hazards, evidence, and missions for a fresh mission run."""
+        cursor = self.connection.cursor()
+        cursor.execute("DELETE FROM evidence")
+        cursor.execute("DELETE FROM husky_missions")
+        cursor.execute("DELETE FROM hazards")
+        self.connection.commit()
+
+    # =============================================================
     # CLOSE
     # =============================================================
 
