@@ -15,10 +15,11 @@ with open(_path, encoding='utf-8') as handle:
         if line.startswith('import json'):
             break
         _lines.append(line)
-_ns = {}
+_ns = {'__file__': _path}
 exec(''.join(_lines), _ns)
 look_filename = _ns['look_filename']
 result_filename = _ns['result_filename']
+_default_output_root = _ns['_default_output_root']
 
 
 def test_look_name_is_the_hazard():
@@ -30,6 +31,12 @@ def test_result_name_is_verified_or_not():
     assert result_filename('pin_T01_2', 'CONFIRMED') == 'T01_verified.png'
     assert result_filename('pin_T02_1', 'NOT_CONFIRMED') == 'T02_cannot_verify.png'
     assert result_filename('pin_T03_1', 'INCONCLUSIVE') == 'T03_cannot_verify.png'
+
+
+def test_default_output_root():
+    root = _default_output_root()
+    assert root.endswith(os.path.join('image', 'path_log'))
+    assert os.path.isabs(root)
 
 
 if __name__ == '__main__':
