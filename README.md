@@ -2,25 +2,24 @@
 
 Curated workspace containing only active and verified assets for **Minh (Vu)** and **Owen**.
 
+## Run command 
+```bash
+# Use for demonstration
+source /opt/ros/humble/setup.bash
+source ~/41068_ws/install/setup.bash
+ros2 launch 41068_ignition_bringup ice_pin_view.launch.py block_count:=4 enable_viewer:=false enble_console:=true
+```
 
-## Team Division
-**Owen - UI & Decision:**
-  - UI:
-  - Decision: `scripts/mission_gate.py`, `scripts/ice_aerial_husky_handoff.py`, `scripts/demo_hazard_stub.py`- 
-- This will need to adjust when Owen join new repo. 
+```bash
+#Unit test 
+cd ~/41068_ws/src/MinhandOwen && python3 -m pytest test/
+```
 
-**Minh (Vu) - Perception & Simulation Architecture:**
-  - Perception: `scripts/ice_rgbd_detector.py`, `scripts/test_ice_rgbd_detector.py`, `launch/ice_detector.launch.py`
-  - Sim World: `worlds/snow_forest.sdf`, `scripts/ice_cable_geometry.py`, `scripts/ice_scenario_manager.py`
 
-- **Course Milestones:**
-  - Rubric & verification checklist: `verify_world_task.md`
-  - Autonomous verification mission: `launch/verify_world_mission.launch.py`
-  - Quantitative benchmark: `launch/ice_evaluator.launch.py`
+## Debug
+Follow these if the command above does not run smoothly
 
-## Quick Launch - current state
-
-+ Dowload package first
++ Verify package/dependency 
 ```bash
 sudo apt-get update
 sudo apt-get install -y python3-opencv python3-pyqt5 
@@ -37,9 +36,6 @@ ros2 launch 41068_ignition_bringup ice_unified_perception.launch.py enable_viewe
 # The Console window will launch and display alongside the Gazebo simulation and RViz.
 
 ```
-
-
-
 ## Quick Launch
 ```bash
 # 1. Master simulation in snow_forest
