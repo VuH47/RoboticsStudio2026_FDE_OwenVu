@@ -6,7 +6,9 @@ asked to look, and one PNG when that look finishes. The file name is the
 hazard and the result.
 """
 
+import os
 import re
+from pathlib import Path
 from typing import Optional
 
 _TRACK = re.compile(r'(T\d+)', re.IGNORECASE)
@@ -33,8 +35,79 @@ def result_filename(request_id: str, status: str) -> str:
     return '%s_cannot_verify.png' % track
 
 
+def _default_output_root() -> str:
+    """Save inside the package's image/path_log directory portably."""
+    file_path = globals().get('__file__')
+    if file_path:
+        curr = Path(file_path).resolve()
+        # 1. Walk up parents to find 'image' (works when running directly from source)
+        for p in curr.parents:
+            cand = p / 'image'
+            if cand.is_dir():
+                return str(cand / 'path_log')
+            # If running from install/ or build/, locate the source workspace
+            if p.name in ('install', 'build'):
+                ws = p.parent
+                for pkg_name in ('MinhandOwen', '41068_ignition_bringup'):
+                    src_cand = ws / 'src' / pkg_name / 'image'
+                    if src_cand.is_dir():
+                        return str(src_cand / 'path_log')
+
+    # 2. Check current working directory and subdirectories
+    cwd = Path.cwd()
+    if (cwd / 'image').is_dir():
+        return str(cwd / 'image' / 'path_log')
+    if (cwd / 'src' / 'MinhandOwen' / 'image').is_dir():
+        return str(cwd / 'src' / 'MinhandOwen' / 'image' / 'path_log')
+
+    # 3. Known workspace locations on this system
+    for known in (
+        Path('/home/vu_pc1/41068_ws/src/MinhandOwen/image'),
+        Path('/home/vu_pc1/41068_ws/src/41068_ignition_bringup/image'),
+    ):
+        if known.is_dir():
+            return str(known / 'path_log')
+
+    return os.path.join(os.getcwd(), 'image', 'path_log')
+
+
+def _default_output_root() -> str:
+    """Save inside the package's image/path_log directory portably."""
+    file_path = globals().get('__file__')
+    if file_path:
+        curr = Path(file_path).resolve()
+        # 1. Walk up parents to find 'image' (works when running directly from source)
+        for p in curr.parents:
+            cand = p / 'image'
+            if cand.is_dir():
+                return str(cand / 'path_log')
+            # If running from install/ or build/, locate the source workspace
+            if p.name in ('install', 'build'):
+                ws = p.parent
+                for pkg_name in ('MinhandOwen', '41068_ignition_bringup'):
+                    src_cand = ws / 'src' / pkg_name / 'image'
+                    if src_cand.is_dir():
+                        return str(src_cand / 'path_log')
+
+    # 2. Check current working directory and subdirectories
+    cwd = Path.cwd()
+    if (cwd / 'image').is_dir():
+        return str(cwd / 'image' / 'path_log')
+    if (cwd / 'src' / 'MinhandOwen' / 'image').is_dir():
+        return str(cwd / 'src' / 'MinhandOwen' / 'image' / 'path_log')
+
+    # 3. Known workspace locations on this system
+    for known in (
+        Path('/home/vu_pc1/41068_ws/src/MinhandOwen/image'),
+        Path('/home/vu_pc1/41068_ws/src/41068_ignition_bringup/image'),
+    ):
+        if known.is_dir():
+            return str(known / 'path_log')
+
+    return os.path.join(os.getcwd(), 'image', 'path_log')
+
+
 import json
-import os
 from datetime import datetime
 
 import rclpy
@@ -107,16 +180,6 @@ class HuskyPathLog(Node):
         path = os.path.join(self._dir, filename)
         cv2.imwrite(path, frame)
         self.get_logger().info('Saved %s' % path)
-
-
-def _default_output_root() -> str:
-    """Save inside the package's image/path_log directory portably."""
-    from pathlib import Path
-    pkg_root = Path(__file__).resolve().parent.parent
-    candidate = pkg_root / 'image' / 'path_log'
-    if (pkg_root / 'image').exists():
-        return str(candidate)
-    return os.path.join(os.getcwd(), 'image', 'path_log')
 
 
 def main() -> None:

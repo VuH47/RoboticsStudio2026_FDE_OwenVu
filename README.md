@@ -24,16 +24,26 @@ Follow these if the command above does not run smoothly
 sudo apt-get update
 sudo apt-get install -y python3-opencv python3-pyqt5 
 
-#!/usr/bin/env python3 to line 1 to any file that build failed or not displayed as image, vid to contain executable permissions (chmod +x).
+#!/usr/bin/env python3 to line 1 to any file that build failed or not displayed as image, vid 
 colcon build --symlink-install --packages-select 41068_ignition_bringup
 
-# 1. THen 
-source install/setup.bash
-export LIBGL_ALWAYS_SOFTWARE=1
-export ROS_LOCALHOST_ONLY=1
-ros2 launch 41068_ignition_bringup ice_unified_perception.launch.py enable_viewer:=false enable_console:=true
+# 1. Clear stale environment paths and source clean ROS 2
+unset AMENT_PREFIX_PATH CMAKE_PREFIX_PATH
+source /opt/ros/humble/setup.bash
 
-# The Console window will launch and display alongside the Gazebo simulation and RViz.
+# 2. Clean old build artifacts
+rm -rf ~/41068_ws/build ~/41068_ws/install ~/41068_ws/log
+
+# 3. Build ONLY MinhandOwen
+cd ~/41068_ws
+colcon build --base-paths src/MinhandOwen --symlink-install
+
+# 4. Source the new build
+source install/setup.bash
+
+# 5. Run unit tests
+cd ~/41068_ws/src/MinhandOwen
+python3 -m pytest test/
 
 ```
 ## Quick Launch
