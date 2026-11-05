@@ -236,7 +236,7 @@ class HazardStore(QObject):
 
         self.database.update_hazard_status(
             hazard_id,
-            "Detected",
+            "Inconclusive",
         )
 
         self.reload()
@@ -263,7 +263,7 @@ class HazardStore(QObject):
 
         self.database.update_hazard_status(
             hazard_id,
-            "Detected",
+            "Inconclusive",
         )
 
         self.reload()

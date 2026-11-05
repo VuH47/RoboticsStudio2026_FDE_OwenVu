@@ -186,8 +186,6 @@ class MapOverlayPanel(QFrame):
     @property
     def drone_location_check(self): return self.legend_panel.drone_location_check
     @property
-    def drone_path_check(self): return self.legend_panel.drone_path_check
-    @property
     def drone_waypoint_check(self): return self.legend_panel.drone_waypoint_check
     @property
     def drone_home_check(self): return self.legend_panel.drone_home_check
@@ -195,8 +193,6 @@ class MapOverlayPanel(QFrame):
     def husky_layer_check(self): return self.legend_panel.husky_layer_check
     @property
     def husky_location_check(self): return self.legend_panel.husky_location_check
-    @property
-    def husky_path_check(self): return self.legend_panel.husky_path_check
     @property
     def husky_waypoint_check(self): return self.legend_panel.husky_waypoint_check
     @property

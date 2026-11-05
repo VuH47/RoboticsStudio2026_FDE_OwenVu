@@ -1,3 +1,4 @@
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -11,45 +12,67 @@ class MissionSummary(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        # =========================================================
+        # MAIN LAYOUT
+        # =========================================================
 
-        # Mission Outcomes
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # =========================================================
+        # MISSION OUTCOMES PANEL
+        # =========================================================
+
         outcomes = QFrame()
         outcomes.setObjectName("infoPanel")
 
         outcomes_layout = QVBoxLayout(outcomes)
         outcomes_layout.setContentsMargins(10, 5, 10, 5)
+        outcomes_layout.setSpacing(5)
 
+        # Title
         outcomes_title = QLabel("Mission Outcomes")
         outcomes_title.setObjectName("sectionTitle")
         outcomes_layout.addWidget(outcomes_title)
 
-        self.outcomes_label = QLabel()
-        outcomes_layout.addWidget(self.outcomes_label)
+        # =========================================================
+        # HORIZONTAL STATISTICS
+        # =========================================================
 
-        # Mission Objectives
-        objectives = QFrame()
-        objectives.setObjectName("infoPanel")
+        stats_layout = QHBoxLayout()
+        stats_layout.setSpacing(20)
 
-        objectives_layout = QVBoxLayout(objectives)
-        objectives_layout.setContentsMargins(10, 5, 10, 5)
+        self.detected_label = QLabel()
+        self.awaiting_label = QLabel()
+        self.resolved_label = QLabel()
+        self.confirmed_label = QLabel()
 
-        objectives_title = QLabel("Mission Objectives")
-        objectives_title.setObjectName("sectionTitle")
-        objectives_layout.addWidget(objectives_title)
+        labels = [
+            self.detected_label,
+            self.awaiting_label,
+            self.resolved_label,
+            self.confirmed_label,
+        ]
 
-        self.objectives_label = QLabel(
-            "Hazards reached:  3 / 10\n"
-            "Current task:      H-02 — Queued"
-        )
-        objectives_layout.addWidget(self.objectives_label)
+        for label in labels:
+            label.setAlignment(Qt.AlignCenter)
+            stats_layout.addWidget(label, 1)
 
+        outcomes_layout.addLayout(stats_layout)
+
+        # Full-width panel
         layout.addWidget(outcomes)
-        layout.addWidget(objectives)
+
+        # Initialise counters
+        self.update_outcomes({})
+
+    # =============================================================
+    # UPDATE MISSION OUTCOMES
+    # =============================================================
 
     def update_outcomes(self, hazards):
+
         detected = len(hazards)
 
         awaiting = sum(
@@ -67,15 +90,30 @@ class MissionSummary(QWidget):
             if hazard["status"] == "Confirmed Hazard"
         )
 
-        self.outcomes_label.setText(
-            f"Detected Hazards:        {detected}\n"
-            f"Awaiting Husky:          {awaiting}\n"
-            f"Resolved / Safe:         {resolved}\n"
-            f"Confirmed Hazards:       {confirmed}"
+        self.detected_label.setText(
+            f"Detected Hazards: {detected}"
         )
 
-    def set_objectives(self, hazards_reached, total_hazards, current_task):
-        self.objectives_label.setText(
-            f"Hazards reached:  {hazards_reached} / {total_hazards}\n"
-            f"Current task:      {current_task}"
+        self.awaiting_label.setText(
+            f"Awaiting Husky: {awaiting}"
         )
+
+        self.resolved_label.setText(
+            f"Resolved / Safe: {resolved}"
+        )
+
+        self.confirmed_label.setText(
+            f"Confirmed Hazards: {confirmed}"
+        )
+
+    # =============================================================
+    # LEGACY COMPATIBILITY
+    # =============================================================
+
+    def set_objectives(
+        self,
+        hazards_reached,
+        total_hazards,
+        current_task,
+    ):
+        pass
