@@ -19,6 +19,7 @@ Install:  pip install PySide6     Run:  ros2 run 41068_ignition_bringup operator
 """
 from __future__ import annotations
 
+import ctypes
 import json
 import math
 import os
@@ -30,10 +31,20 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+
+def _ensure_immortal_none() -> None:
+    """Compensate for PySide6 6.12.0 bug which decrements None refcount on void/enum Qt methods."""
+    try:
+        if sys.getrefcount(None) < 500000:
+            for _ in range(100000):
+                ctypes.pythonapi.Py_IncRef(ctypes.py_object(None))
+    except Exception:
+        pass
+
 import numpy as np
 import rclpy
 from cv_bridge import CvBridge
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException, SingleThreadedExecutor
 from rclpy.node import Node
@@ -77,9 +88,61 @@ QWidget { background: %(BG)s; color: %(TEXT)s; font-family: 'DejaVu Sans'; font-
 QFrame#card, QFrame#panel { background: %(PANEL)s; border: 1px solid #343941; }
 QLabel#h1 { font-size: 18px; font-weight: bold; }
 QLabel#h2 { font-size: 13px; font-weight: bold; color: %(MUTED)s; }
-QPushButton { background: #2f343c; border: 1px solid #454b55; padding: 7px; }
+QPushButton { background: #2f343c; border: 1px solid #454b55; padding: 7px; font-weight: bold; border-radius: 4px; }
 QPushButton:hover { background: #3a414b; }
 QPushButton:disabled { color: #666c75; background: #25282e; }
+
+QPushButton#btn_start {
+    background: #1b3a24;
+    border: 2px solid #2e7d32;
+    color: #81c784;
+    padding: 8px;
+    font-size: 13px;
+    font-weight: bold;
+}
+QPushButton#btn_start:hover {
+    background: #2e7d32;
+    color: #ffffff;
+}
+
+QPushButton#btn_rtb {
+    background: #3e2712;
+    border: 2px solid #e65100;
+    color: #ffb74d;
+    padding: 8px;
+    font-size: 13px;
+    font-weight: bold;
+}
+QPushButton#btn_rtb:hover {
+    background: #e65100;
+    color: #ffffff;
+}
+
+QPushButton#btn_estop {
+    background: #4a1515;
+    border: 2px solid #c62828;
+    color: #ef9a9a;
+    padding: 8px;
+    font-size: 13px;
+    font-weight: bold;
+}
+QPushButton#btn_estop:hover {
+    background: #c62828;
+    color: #ffffff;
+}
+
+QPushButton#btn_snapshot {
+    background: #272b33;
+    border: 1px solid #454b55;
+    color: %(TEXT)s;
+    padding: 6px;
+    font-size: 12px;
+}
+QPushButton#btn_snapshot:hover {
+    background: #37474f;
+    color: #ffffff;
+}
+
 QTableWidget { background: %(PANEL)s; gridline-color: #343941; border: none; }
 QHeaderView::section { background: %(TITLE)s; color: %(MUTED)s; border: none; padding: 4px; }
 """ % dict(BG=BG, TEXT=TEXT, PANEL=PANEL, MUTED=MUTED, TITLE=TITLE)
@@ -113,10 +176,23 @@ class RosState(Node):
         self._last_states: Dict[str, str] = {}
         self._last_phase: Optional[str] = None
 
+        self.cmd_pub = self.create_publisher(String, '/fde/mission_command', 10)
+        self.husky_cmd = self.create_publisher(Twist, '/husky1/cmd_vel', 10)
+        self.parrot_cmd = self.create_publisher(Twist, '/parrot1/cmd_vel', 10)
+        self.last_debug_time: Dict[str, float] = {'parrot': 0.0, 'husky': 0.0}
+
+        # Annotated debug streams (detector & confirm)
         self.create_subscription(Image, g('parrot_image_topic'),
-                                 lambda m: self._on_image('parrot', m), qos_profile_sensor_data)
+                                 lambda m: self._on_debug_image('parrot', m), qos_profile_sensor_data)
         self.create_subscription(Image, g('husky_image_topic'),
-                                 lambda m: self._on_image('husky', m), qos_profile_sensor_data)
+                                 lambda m: self._on_debug_image('husky', m), qos_profile_sensor_data)
+
+        # Raw camera live fallbacks
+        self.create_subscription(Image, '/parrot1/camera/image',
+                                 lambda m: self._on_raw_image('parrot', m), qos_profile_sensor_data)
+        self.create_subscription(Image, '/husky1/camera/image',
+                                 lambda m: self._on_raw_image('husky', m), qos_profile_sensor_data)
+
         self.create_subscription(String, '/fde/detection_status', self._on_status, 10)
         self.create_subscription(PoseStamped, '/fde/detection', self._on_detection, 10)
         self.create_subscription(String, '/husky1/ice_confirm/result', self._on_husky_result, 10)
@@ -125,15 +201,52 @@ class RosState(Node):
                                  lambda m: self._on_odom('parrot', m), qos_profile_sensor_data)
         self.create_subscription(Odometry, '/husky1/odometry',
                                  lambda m: self._on_odom('husky', m), qos_profile_sensor_data)
-        self.get_logger().info('Operator console ready (read-only).')
+        self.get_logger().info('Operator console ready with active mission controls.')
 
     def _log(self, source: str, text: str, colour: str) -> None:
         """Call with self.lock held."""
         self.events.append((time.strftime('%H:%M:%S'), source, text, colour))
 
+    def log_event(self, source: str, text: str, colour: str) -> None:
+        with self.lock:
+            self._log(source, text, colour)
+
+    def send_mission_command(self, cmd: str) -> None:
+        msg = String()
+        msg.data = cmd
+        self.cmd_pub.publish(msg)
+        self.get_logger().info('Dispatched mission command: %s' % cmd)
+
+    def emergency_halt(self) -> None:
+        stop = Twist()
+        for _ in range(5):
+            self.husky_cmd.publish(stop)
+            self.parrot_cmd.publish(stop)
+        self.send_mission_command('estop')
+
+    def _on_debug_image(self, key: str, msg: Image) -> None:
+        self.last_debug_time[key] = time.monotonic()
+        self._on_image(key, msg)
+
+    def _on_raw_image(self, key: str, msg: Image) -> None:
+        if time.monotonic() - self.last_debug_time[key] > 1.5:
+            self._on_image(key, msg)
+
     def _on_image(self, key: str, msg: Image) -> None:
         try:
-            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            if not msg or not msg.data or msg.width <= 0 or msg.height <= 0:
+                return
+            raw = np.frombuffer(msg.data, dtype=np.uint8)
+            enc = str(getattr(msg, 'encoding', '') or '').lower()
+            if 'rgb' in enc:
+                rgb_arr = raw.reshape((msg.height, msg.width, 3))
+                frame = np.ascontiguousarray(rgb_arr[:, :, ::-1])
+            elif 'bgr' in enc:
+                frame = raw.reshape((msg.height, msg.width, 3))
+            elif self.bridge is not None:
+                frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            else:
+                frame = raw.reshape((msg.height, msg.width, 3))
         except Exception as exc:  # noqa: BLE001
             self.get_logger().warn('Bad %s frame: %s' % (key, exc), throttle_duration_sec=5.0)
             return
@@ -355,53 +468,78 @@ class MapWidget(QtWidgets.QWidget):
 
     def paintEvent(self, _e) -> None:  # noqa: N802
         p = QtGui.QPainter(self)
-        p.setRenderHint(QtGui.QPainter.Antialiasing)
-        w, h = self.width(), self.height()
-        p.fillRect(self.rect(), QtGui.QColor('#14161a'))
-        s = min(w / (self.X1 - self.X0), h / (self.Y1 - self.Y0))
-        ox = (w - s * (self.X1 - self.X0)) / 2
-        oy = (h - s * (self.Y1 - self.Y0)) / 2
+        try:
+            p.setRenderHint(QtGui.QPainter.Antialiasing)
+            w, h = self.width(), self.height()
+            p.fillRect(self.rect(), QtGui.QColor('#14161a'))
+            
+            # 1. Swap aspect ratio: width maps Y (50m span), height maps X (120m span)
+            s = min(w / (self.Y1 - self.Y0), h / (self.X1 - self.X0))
+            ox = (w - s * (self.Y1 - self.Y0)) / 2
+            oy = (h - s * (self.X1 - self.X0)) / 2
 
-        def px(x: float, y: float) -> QtCore.QPointF:
-            return QtCore.QPointF(ox + (x - self.X0) * s, h - oy - (y - self.Y0) * s)
+            # 2. Vertical projection:
+            #    Screen X = lateral offset (Y1 - y) -> Lane on left, Cable on right
+            #    Screen Y = longitudinal progress (X) -> Bottom (-30) to Top (+90)
+            def px(x: float, y: float) -> QtCore.QPointF:
+                return QtCore.QPointF(
+                    ox + (self.Y1 - y) * s,
+                    h - oy - (x - self.X0) * s
+                )
 
-        p.setPen(QtGui.QPen(QtGui.QColor('#262a31'), 1))
-        for gx in range(int(self.X0), int(self.X1) + 1, 10):
-            p.drawLine(px(gx, self.Y0), px(gx, self.Y1))
-        for gy in range(int(self.Y0), int(self.Y1) + 1, 10):
-            p.drawLine(px(self.X0, gy), px(self.X1, gy))
-        dash = QtGui.QPen(QtGui.QColor(MUTED), 1, QtCore.Qt.DashLine)
-        p.setPen(dash)
-        p.drawLine(px(20, -30), px(80, -30))          # cable line
-        p.drawLine(px(-30, 0), px(90, 0))              # Husky lane y=0
-        p.drawLine(px(-30, -10), px(90, -10))          # Husky lane y=-10
-        p.setPen(QtGui.QColor(MUTED))
-        p.drawText(px(22, -28), 'cable')
-        p.drawText(px(-28, 3), 'lane y=0')
-        p.drawText(px(-28, -7), 'lane y=-10')
+            # 3. Grid lines
+            p.setPen(QtGui.QPen(QtGui.QColor('#262a31'), 1))
+            for gx in range(int(self.X0), int(self.X1) + 1, 10):
+                p.drawLine(px(gx, self.Y0), px(gx, self.Y1))   # horizontal grid rungs
+            for gy in range(int(self.Y0), int(self.Y1) + 1, 10):
+                p.drawLine(px(self.X0, gy), px(self.X1, gy))   # vertical grid tracks
 
-        for t in self.targets:
-            try:
-                pt = px(float(t['x']), float(t['y']))
-            except (KeyError, TypeError, ValueError):
-                continue
-            c = QtGui.QColor(state_colour(str(t.get('state', ''))))
-            p.setBrush(c)
-            p.setPen(QtCore.Qt.NoPen)
-            p.drawEllipse(pt, 5, 5)
-        if self.husky:
-            pt = px(self.husky['x'], self.husky['y'])
-            p.setBrush(QtGui.QColor(ORANGE))
-            p.setPen(QtCore.Qt.NoPen)
-            p.drawRect(QtCore.QRectF(pt.x() - 6, pt.y() - 6, 12, 12))
-        if self.parrot:
-            pt = px(self.parrot['x'], self.parrot['y'])
-            tri = QtGui.QPolygonF([QtCore.QPointF(pt.x(), pt.y() - 8),
-                                   QtCore.QPointF(pt.x() - 7, pt.y() + 6),
-                                   QtCore.QPointF(pt.x() + 7, pt.y() + 6)])
-            p.setBrush(QtGui.QColor(BLUE))
-            p.setPen(QtCore.Qt.NoPen)
-            p.drawPolygon(tri)
+            # 4. Vertical lanes and cables (Line 488)
+            dash = QtGui.QPen(QtGui.QColor(MUTED), 1, QtCore.Qt.DashLine)
+            p.setPen(dash)
+            p.drawLine(px(20, -30), px(80, -30))               # Vertical cable line
+            p.drawLine(px(-30, 0), px(90, 0))                   # Vertical lane y=0
+            p.drawLine(px(-30, -10), px(90, -10))               # Vertical lane y=-10
+
+            p.setPen(QtGui.QColor(MUTED))
+            # Text labels placed alongside the vertical lines
+            pt_cable = px(50, -30)
+            p.drawText(int(pt_cable.x() + 6), int(pt_cable.y()), 'cable')
+            pt_lane0 = px(10, 0)
+            p.drawText(int(pt_lane0.x() - 60), int(pt_lane0.y()), 'lane y=0')
+            pt_lane10 = px(10, -10)
+            p.drawText(int(pt_lane10.x() + 6), int(pt_lane10.y()), 'lane y=-10')
+
+            # 5. Targets and robot markers
+            for t in self.targets:
+                try:
+                    pt = px(float(t['x']), float(t['y']))
+                except (KeyError, TypeError, ValueError):
+                    continue
+                c = QtGui.QColor(state_colour(str(t.get('state', ''))))
+                p.setBrush(c)
+                p.setPen(QtCore.Qt.NoPen)
+                p.drawEllipse(pt, 5, 5)
+
+            if self.husky:
+                pt = px(self.husky['x'], self.husky['y'])
+                p.setBrush(QtGui.QColor(ORANGE))
+                p.setPen(QtCore.Qt.NoPen)
+                p.drawRect(QtCore.QRectF(pt.x() - 6, pt.y() - 6, 12, 12))
+
+            if self.parrot:
+                pt = px(self.parrot['x'], self.parrot['y'])
+                # Triangle points forward (+X / UP on screen)
+                tri = QtGui.QPolygonF([
+                    QtCore.QPointF(pt.x(), pt.y() - 8),
+                    QtCore.QPointF(pt.x() - 7, pt.y() + 6),
+                    QtCore.QPointF(pt.x() + 7, pt.y() + 6)
+                ])
+                p.setBrush(QtGui.QColor(BLUE))
+                p.setPen(QtCore.Qt.NoPen)
+                p.drawPolygon(tri)
+        finally:
+            p.end()
 
 
 def section(title: str) -> QtWidgets.QLabel:
@@ -417,14 +555,14 @@ class Console(QtWidgets.QMainWindow):
         self.node = node
         self.stale_s = float(node.get_parameter('stale_seconds').value)
         self._event_count = -1
-        self.setWindowTitle('FDE Operator Console - Parrot + Husky')
+        self.setWindowTitle('FDE Operator Console')
         self.resize(1500, 900)
 
         # header
         self.mission = QtWidgets.QLabel('Mission: waiting for data')
         self.link = QtWidgets.QLabel('NO DATA')
         self.clock = QtWidgets.QLabel('')
-        title = QtWidgets.QLabel('FDE ICE DETECTION')
+        title = QtWidgets.QLabel('FDE OS')
         title.setObjectName('h1')
         head = QtWidgets.QFrame()
         head.setObjectName('panel')
@@ -445,13 +583,13 @@ class Console(QtWidgets.QMainWindow):
         mp = QtWidgets.QFrame()
         mp.setObjectName('panel')
         ml = QtWidgets.QVBoxLayout(mp)
-        ml.addWidget(section('MAP (top-down, odometry)'))
+        ml.addWidget(section('2D Overview'))
         ml.addWidget(self.map, 1)
         tp = QtWidgets.QFrame()
         tp.setObjectName('panel')
         tl = QtWidgets.QVBoxLayout(tp)
-        tl.addWidget(section('ROBOT TELEMETRY'))
-        for k, c, n in (('parrot', BLUE, 'Parrot (UAV)'), ('husky', ORANGE, 'Husky (UGV)')):
+        tl.addWidget(section('Device Telementry'))
+        for k, c, n in (('parrot', BLUE, 'UAV'), ('husky', ORANGE, 'UGV')):
             lab = QtWidgets.QLabel(n)
             lab.setStyleSheet('color:%s; font-weight:bold; border:none;' % c)
             tl.addWidget(lab)
@@ -460,14 +598,30 @@ class Console(QtWidgets.QMainWindow):
         cp.setObjectName('panel')
         cl = QtWidgets.QVBoxLayout(cp)
         cl.addWidget(section('MISSION CONTROLS'))
+        self.btn_start = QtWidgets.QPushButton('Start Mission')
+        self.btn_start.setObjectName('btn_start')
+        self.btn_start.setCursor(QtCore.Qt.PointingHandCursor)
+        self.btn_start.clicked.connect(self.start_mission)
+
+        self.btn_rtb = QtWidgets.QPushButton('Return Home')
+        self.btn_rtb.setObjectName('btn_rtb')
+        self.btn_rtb.setCursor(QtCore.Qt.PointingHandCursor)
+        self.btn_rtb.clicked.connect(self.return_home)
+
+        self.btn_estop = QtWidgets.QPushButton('Emergency Stop')
+        self.btn_estop.setObjectName('btn_estop')
+        self.btn_estop.setCursor(QtCore.Qt.PointingHandCursor)
+        self.btn_estop.clicked.connect(self.estop)
+
         self.btn_snapshot = QtWidgets.QPushButton('Snapshot')
+        self.btn_snapshot.setObjectName('btn_snapshot')
+        self.btn_snapshot.setCursor(QtCore.Qt.PointingHandCursor)
         self.btn_snapshot.clicked.connect(self.save_snapshot)
+
+        cl.addWidget(self.btn_start)
+        cl.addWidget(self.btn_rtb)
+        cl.addWidget(self.btn_estop)
         cl.addWidget(self.btn_snapshot)
-        for name in ('Request confirm', 'Pause', 'Return home'):
-            b = QtWidgets.QPushButton(name)
-            b.setEnabled(False)
-            b.setToolTip('Not wired yet (placeholder for a later release)')
-            cl.addWidget(b)
         side = QtWidgets.QVBoxLayout()
         side.addWidget(mp, 3)
         side.addWidget(tp, 0)
@@ -477,13 +631,13 @@ class Console(QtWidgets.QMainWindow):
         side_w.setFixedWidth(340)
 
         # main column
-        self.p_parrot = ImagePane('PARROT  aerial detection', BLUE)
-        self.p_husky = ImagePane('HUSKY  visual confirm', ORANGE)
+        self.p_parrot = ImagePane('Ariel Inspection', BLUE)
+        self.p_husky = ImagePane('Ground-level view and Identification', ORANGE)
         panes = QtWidgets.QHBoxLayout()
         panes.addWidget(self.p_parrot, 1)
         panes.addWidget(self.p_husky, 1)
-        self.c_parrot = Card('PARROT  detection', BLUE)
-        self.c_husky = Card('HUSKY  confirmation', ORANGE)
+        self.c_parrot = Card('Air', BLUE)
+        self.c_husky = Card('Ground', ORANGE)
         cards = QtWidgets.QHBoxLayout()
         cards.addWidget(self.c_parrot, 1)
         cards.addWidget(self.c_husky, 1)
@@ -540,6 +694,18 @@ class Console(QtWidgets.QMainWindow):
         except OSError as exc:
             self.node.get_logger().error('Snapshot failed: %s' % exc)
 
+    def start_mission(self) -> None:
+        self.node.send_mission_command('start')
+        self.node.log_event('CONSOLE', 'Operator commanded: START MISSION', GREEN)
+
+    def return_home(self) -> None:
+        self.node.send_mission_command('return_home')
+        self.node.log_event('CONSOLE', 'Operator commanded: RETURN HOME', AMBER)
+
+    def estop(self) -> None:
+        self.node.emergency_halt()
+        self.node.log_event('CONSOLE', 'EMERGENCY STOP ACTIVATED', RED)
+
     @staticmethod
     def _item(text: str, colour: Optional[str] = None) -> QtWidgets.QTableWidgetItem:
         it = QtWidgets.QTableWidgetItem(text)
@@ -548,6 +714,7 @@ class Console(QtWidgets.QMainWindow):
         return it
 
     def refresh(self) -> None:
+        _ensure_immortal_none()
         s = self.node.snapshot()
         now = time.monotonic()
         self.clock.setText(time.strftime('%H:%M:%S'))
@@ -636,6 +803,7 @@ def main(args: Optional[List[str]] = None) -> None:
               'Run inside WSLg or set DISPLAY.', file=sys.stderr)
         sys.exit(1)
 
+    _ensure_immortal_none()
     rclpy.init(args=args)
     node = RosState()
     executor = SingleThreadedExecutor()

@@ -123,10 +123,9 @@ def generate_launch_description():
 
     console = Node(
         package='41068_ignition_bringup',
-        executable='operator_gui.py',
-        name='fde_operator_gui',
+        executable='operator_console.py',
+        name='operator_console',
         output='screen',
-        parameters=[{'use_sim_time': True}],
         condition=IfCondition(LaunchConfiguration('enable_console')),
     )
 

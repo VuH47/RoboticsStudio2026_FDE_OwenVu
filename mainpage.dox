@@ -1,0 +1,230 @@
+/** \mainpage Robotics Studio 1 (41068) — Alpine Ice Perception & Mission System
+
+@tableofcontents
+
+@section overview Overview
+
+The **Alpine Ice Perception & Mission System** is an autonomous multi-robot inspection framework developed for **Robotics Studio 1 (41068)** at the **University of Technology Sydney (UTS)**.
+
+In alpine ski resorts, severe cold and freezing fog create ice sleeves on overhead ski-lift cables. Excessive icing shifts the cable's center of mass, introduces severe catenary sag, causes tower derailment hazards, and risks collisions with ski gondolas.
+
+This project delivers a **heterogeneous dual-robot system** operating in **Ignition Gazebo Fortress** with **ROS 2 Humble**:
+1. **Parrot (UAV - Aerial Scout)**: Patrols overhead along the ski-lift cableway, tracking hyperbolic cosine catenary cable spans and isolating ice sleeves via RGB-D perception (Option B). Detected hazards are pinned as high-priority target coordinates (`T01`, `T02`, ...).
+2. **Husky (UGV - Ground Inspector)**: Traverses rugged snow terrain under Nav2 guidance, calculates collision-free detours around lethal rock gates and tree obstacles, reaches safe viewing standoff poses, and performs multi-frame optical visual confirmation.
+3. **Operator GUI & Database**: Interactive PySide6 and PyVista 3D visualization dashboard with live camera streams, real-time robot pose tracking, documented hazard management backed by SQLite, and ROS 2 service-based mission control.
+
+| System Characteristic | Specification / Realisation |
+|---|---|
+| **Robotics Middleware** | ROS 2 Humble Hawksbill on Ubuntu 22.04 LTS (WSL2) |
+| **Physics Simulation** | Ignition Gazebo Fortress (IGN Citadel / Fortress v6) |
+| **Aerial Robot (UAV)** | Quadcopter (`parrot1`) equipped with forward RGB-D and downward altimeter |
+| **Ground Robot (UGV)** | Clearpath Husky (`husky1`) with RealSense RGB-D, 2D LiDAR, and contact bumper sensors |
+| **Navigation Stack** | Nav2 with custom Behavior Tree recoveries and costmap layer integration |
+| **Coordination** | Unified TF transform bridge (`unified_tf_bridge.py`) across heterogeneous odom frames |
+
+---
+
+@section architecture System Architecture
+
+The operational workflow coordinates aerial scouting, ground inspection, and operator oversight across distinct phases:
+
+@code
+  +--------------------------------------------------------------------------+
+  |                          Aerial Scout (Parrot UAV)                       |
+  |  - Follows cable corridor (y ≈ -29.25 m, altitude 7-12 m)                 |
+  |  - Option B RGB-D Detection (HSV color filter + 3D radial elevation)      |
+  |  - Pins target hazard coordinates (T01, T02, ...) onto /fde/ice_targets  |
+  +-------------------------------------+------------------------------------+
+                                        |
+                                        v
+  +--------------------------------------------------------------------------+
+  |                       Unified TF Bridge & Priority Queue                 |
+  |  - Translates parrot1_odom coordinates into husky1_odom navigation frame  |
+  |  - Sorts targets by nearest-first along Husky travel corridor             |
+  +-------------------------------------+------------------------------------+
+                                        |
+                                        v
+  +--------------------------------------------------------------------------+
+  |                      Ground Inspector (Husky UGV)                        |
+  |  - Nav2 path planning with custom detour algorithm (husky_detour.py)      |
+  |  - Evaluates costmap lethal thresholds; filters soft inflation halos     |
+  |  - 3-point reverse-before-turn maneuver for tight circumscribed radius    |
+  |  - Positions at safe standoff pose facing pin (2.5 m LoS check)          |
+  |  - Multi-frame camera confirmation (husky_ice_visual_confirm.py)         |
+  +-------------------------------------+------------------------------------+
+                                        |
+                                        v
+  +--------------------------------------------------------------------------+
+  |                     Operator Interface & Mission Control                 |
+  |  - PySide6 + PyVista 3D map telemetry (operator_gui.py)                  |
+  |  - Live camera feeds (BGR888 sensor_data QoS) & documented SQLite records|
+  |  - Mission gate approval (/operator/approve, /operator/abort)            |
+  +--------------------------------------------------------------------------+
+@endcode
+
+---
+
+@section perception Perception Pipeline
+
+The perception pipeline comprises two complementary stages: aerial candidate detection and ground verification.
+
+@subsection aerial_rgbd Aerial Option B RGB-D Detection (ice_rgbd_detector.py)
+The drone flies overhead along the ski-lift corridor and inspects the cable using forward RGB-D imagery. The detector separates ice sleeves from surrounding terrain and bare cable using a fused colour-depth metric:
+1. **HSV Color Segmentation**:
+   - Isolates the pale-blue/cyan tint of dense ice.
+   - Rejects pure white snow by enforcing Saturation > 25.
+   - Rejects bare dark steel cable by enforcing Value > 80.
+2. **Radial 3D Elevation Calculation**:
+   - Uses the analytic catenary model from `ice_cable_geometry.py`.
+   - Computes perpendicular radial distance @f$ r @f$ of pointcloud returns from the cable centerline:
+     - Bare steel cable: @f$ r \le 0.17\,\text{m} @f$.
+     - Ice sleeve: @f$ r \ge 0.22\,\text{m} @f$ (surface elevation verified).
+3. **Target Publishing**:
+   - Validated candidates are packaged into JSON payloads and published to `/fde/ice_targets` and `/ice/placed`.
+
+@subsection ground_confirm Ground Visual Confirmation (husky_ice_visual_confirm.py)
+Once Husky reaches its inspection standoff pose:
+1. Re-orients towards the aerial pin coordinates.
+2. Evaluates 5 consecutive camera frames using HSV segmentation and contour bounding analysis.
+3. Requires **at least 3 positive detections out of 5 frames** to publish `CONFIRMED` to `/husky1/ice_confirm/result`.
+4. Saves high-resolution diagnostic images via `husky_path_log.py`:
+   - `T0X_under_determination.png` upon arrival.
+   - `T0X_verified.png` or `T0X_cannot_verify.png` upon conclusion.
+
+---
+
+@section detour Obstacle Avoidance & Detour Architecture
+
+Operating a 100 kg ground robot across snowbound alpine slopes requires strict collision avoidance without sacrificing navigation progress. `husky_detour.py` implements specialized terrain intelligence:
+
+@subsection lethal_thresholds Costmap Lethal Thresholds
+Standard Nav2 costmaps scale lethal obstacles differently depending on representation:
+- ROS 2 `OccupancyGrid` maps lethal obstacles to `100`.
+- Costmap2D internal lethal costs are `253-254`.
+- **Threshold Rule**: Both formats are checked simultaneously:
+  @code{.py}
+  is_lethal = (99 <= cost <= 100) or (253 <= cost <= 254)
+  @endcode
+- Soft inflation halos (`cost < 99`) are intentionally **not** treated as physical barriers for line-of-sight rays (`sight_clear()`) or approach stand checks (`_approach_blocked()`), preventing phantom obstacle deadlocks.
+
+@subsection corridor_sorting Corridor Sorting
+Candidate detour paths are sorted by proximity to `goal_y`. This prioritises the open southern snow corridor (@f$ y \in [-22, -10]\,\text{m} @f$) over the dangerously narrow northern rock gate passages (@f$ y \in [-8, -4]\,\text{m} @f$).
+
+@subsection reverse_turn Reverse-Before-Turn (3-Point Turn)
+Husky's 1.0 m x 1.0 m chassis has a diagonal circumscribed footprint radius of @f$ R \approx 0.71\,\text{m} @f$. Pivoting directly in tight rock clusters risks corner collisions.
+- When an obstacle is detected within **1.3 m**, Husky executes a **0.5 m reverse backup** to open rotational clearance before initiating yaw rotation.
+
+@subsection near_sight Near-Field Camera Occlusion
+Before accepting an inspection viewing stance, `near_sight_clear` verifies that the initial **2.5 m** along the camera sightline is completely devoid of obstacles, ensuring rock outcrops do not occlude the camera lens.
+
+@subsection bumper_safety Safety Bumper Stop (husky_bumper_stop.py)
+- Gazebo contact sensors on the chassis collision box and 4 wheels (`front_left`, `front_right`, `rear_left`, `rear_right`) monitor physical impacts.
+- Terrain contacts with soft snow ground are filtered out.
+- Solid impacts (rocks, tree trunks) trigger the immediate generation of a virtual `bumper_scan` (LaserScan at 0.70 m ahead) injected into Nav2's local and global costmaps.
+- **Critical Policy**: Motor commands (`cmd_vel`) are **never continuously zeroed at high frequency**, enabling Nav2's native Behavior Tree `<BackUp backup_dist="0.40"/>` recovery routine to execute without interference.
+
+---
+
+@section cable_geometry Alpine Cable Geometry Model
+
+The ski-lift cable catenary is analytically calculated in `ice_cable_geometry.py`:
+- Spans:
+  - `span_01`: @f$ x \in [0, 40]\,\text{m} @f$
+  - `span_02`: @f$ x \in [40, 68]\,\text{m} @f$
+  - `span_03`: @f$ x \in [68, 92]\,\text{m} @f$
+- Nominal cable centerline: @f$ y = -29.25\,\text{m} @f$ with left and right cable tracks.
+- Catenary elevation @f$ z(x) @f$ follows hyperbolic cosine sag:
+  @f[
+    z(x) = z_0 + a \cdot \left(\cosh\left(\frac{x - x_m}{a}\right) - 1\right)
+  @f]
+This allows exact ground truth placement in simulation (`ice_scenario_manager.py`) and accurate aerial radial distance verification.
+
+---
+
+@section modules Software Modules & Repository Structure
+
+| File / Script | Primary Role | Description |
+|---|---|---|
+| `scripts/husky_pin_view.py` | Mission Executive | Main mission orchestrator: receives aerial pins, drives Husky to standoff poses, triggers visual verification. |
+| `scripts/husky_detour.py` | Motion Planning | Nav2 detour planner, lethal costmap evaluator, 3-point turn maneuver, and line-of-sight ray caster. |
+| `scripts/husky_bumper_stop.py` | Safety Monitor | Wheel and chassis collision monitor; publishes virtual laser scans to costmaps on solid contact. |
+| `scripts/husky_ice_visual_confirm.py` | UGV Perception | Ground multi-frame HSV confirmation with majority voting logic. |
+| `scripts/husky_path_log.py` | Data Logging | Diagnostic image logger; saves arrival and confirmation frames to `image/path_log/<timestamp>/`. |
+| `scripts/ice_rgbd_detector.py` | UAV Perception | Option B aerial perception combining HSV color filtering and 3D catenary radial elevation. |
+| `scripts/ice_cable_geometry.py` | Catenary Math | Catenary sag calculation, deterministic layout sampling (`sample_layout`), and model coordinates. |
+| `scripts/ice_scenario_manager.py` | Simulation Manager | Dynamically repositions ice models onto cables via Ignition Gazebo services using seed parameters. |
+| `scripts/ice_target_tracker.py` | Target State Machine | Priority queue maintaining target tracks through `TRACKING -> READY -> ACTIVE -> CONFIRMED`. |
+| `scripts/unified_tf_bridge.py` | Coordinate Transforms | TF bridge maintaining transformations between `parrot1_odom` and `husky1_odom`. |
+| `scripts/mission_gate.py` | Safety Gate | Operator approval gate exposing `/operator/approve`, `/operator/abort`, and `/operator/hold` Trigger services. |
+| `scripts/operator_console.py` | Operator Console | Lightweight read-only Qt/terminal status dashboard. |
+| `fde_gui/scripts/operator_gui.py` | Primary GUI | Full PySide6 + PyVista 3D interactive map, live camera viewers, and mission telemetry. |
+| `fde_gui/operator_interface/` | GUI Subsystem | SQLite database (`mission_database.py`), target synchronizer (`ros_target_sync.py`), and 3D widgets. |
+
+---
+
+@section build_and_run Building and Execution
+
+@subsection build_pkg Building the Package
+Ensure ROS 2 Humble is sourced, then build with symlink install:
+
+@code{.sh}
+source /opt/ros/humble/setup.bash
+cd ~/41068_ws
+colcon build --base-paths src/MinhandOwen --symlink-install
+source install/setup.bash
+@endcode
+
+@subsection run_mission Running Missions
+
+**1. Adaptive Pin-View Mission (Parrot Pins -> Husky Detours & Verifies)**:
+@code{.sh}
+ros2 launch 41068_ignition_bringup ice_pin_view.launch.py block_count:=4 enable_console:=true enable_viewer:=true
+@endcode
+
+**2. Full Concurrent Perception Mission**:
+@code{.sh}
+ros2 launch 41068_ignition_bringup ice_unified_perception.launch.py
+@endcode
+
+**3. Operator UI Guidance Console**:
+@code{.sh}
+ros2 launch 41068_ignition_bringup 41068_operator_ui.launch.py
+@endcode
+
+---
+
+@section test_suite Unit Testing & Verification
+
+The package includes 11 dedicated test suites in `test/`, verifying core logic without requiring an active Gazebo instance:
+
+| Test File | Verification Scope |
+|---|---|
+| `test/test_husky_detour.py` | Lethal costmap thresholds, corridor sorting, 3-point reverse turns, and line-of-sight checks. |
+| `test/test_husky_pin_view.py` | Stand pose generation, standoff distances, and target queue sequencing. |
+| `test/test_husky_bumper_stop.py` | Snow ground filtering vs solid collision detection and virtual bumper scan geometry. |
+| `test/test_husky_ice_visual_confirm.py` | 5-frame majority voting and HSV color bounding box logic. |
+| `test/test_husky_path_log.py` | Log filename generation (`T0X_under_determination`, `T0X_verified`) and portable path resolution. |
+| `test/test_husky_ice_priority.py` | Target queue ranking and priority ordering. |
+| `test/test_husky_pose_correction.py` | Heading alignment and yaw error corrections facing ice targets. |
+| `test/test_ice_rgbd_detector.py` | HSV color segmentation, snow rejection, and depth radial elevation calculations. |
+| `test/test_ice_target_tracker.py` | State transitions (`TRACKING -> READY -> ACTIVE -> CONFIRMED`) and snapshot dictionaries. |
+| `test/test_detection_viewer.py` | OpenCV combined HUD layout rendering and target box projections. |
+| `test/test_scan_ground_filter_pitch.py` | LiDAR ground pitch compensation and obstacle extraction. |
+
+Run the complete test suite:
+@code{.sh}
+cd ~/41068_ws/src/MinhandOwen
+python3 -m pytest test/
+@endcode
+
+---
+
+@section authors Authors & Academic Context
+
+- **Institution**: University of Technology Sydney (UTS)
+- **Subject**: Robotics Studio 1 (41068)
+- **Project**: Alpine Ice Perception & Mission System
+- **Authors**: Vu (Minh) & Owen
+- **Course Coordinator**: Dr. Alen Alempijevic
+
+*/

@@ -378,6 +378,10 @@ class HuskyPinView(Node):
         self._tour_gate = TourGate()
         self._goal_from_xy: Optional[Tuple[float, float]] = None
         self._stand_align_logged = False
+        self.declare_parameter('require_operator_start', True)
+        self._require_operator_start = bool(self.get_parameter('require_operator_start').value)
+        self._operator_started = False
+        self._op_wait_logged = False
         self._tour_released = False
         self._tour_wait_logged = False
         self._ice_placed = False
@@ -432,6 +436,13 @@ class HuskyPinView(Node):
             self._on_local_costmap, local_qos)
         self.create_subscription(
             LaserScan, '/husky1/sonar', self._on_sonar, qos_profile_sensor_data)
+        self._estop = False
+        self._rtb = False
+        self._rtb_husky_done = False
+        self._rtb_retry_at = 0.0
+        self._active_goal_handle = None
+        self.create_subscription(
+            String, '/fde/mission_command', self._on_mission_command, 10)
         hz = float(self.get_parameter('control_hz').value)
         self.create_timer(1.0 / max(hz, 1.0), self._tick)
         self.create_timer(0.5, self._publish_pins)
@@ -442,6 +453,131 @@ class HuskyPinView(Node):
     def _on_parrot(self, msg: Odometry) -> None:
         p, q = msg.pose.pose.position, msg.pose.pose.orientation
         self._parrot = (p.x, p.y, p.z, _yaw_from_quat(q.z, q.w))
+
+    def _on_mission_command(self, msg: String) -> None:
+        cmd = str(msg.data or '').strip().lower()
+        self.get_logger().info('Received mission command: %s' % cmd)
+        if cmd == 'start':
+            self._estop = False
+            self._rtb = False
+            self._operator_started = True
+            self.get_logger().info('[MISSION CONTROL] Mission START authorized by operator.')
+        elif cmd in ('estop', 'pause', 'stop'):
+            self._estop = True
+            self._cmd.publish(Twist())
+            self._husky_cmd.publish(Twist())
+            if self._active_goal_handle is not None:
+                try:
+                    self._active_goal_handle.cancel_goal_async()
+                except Exception:
+                    pass
+            self.get_logger().warn('[MISSION CONTROL] EMERGENCY STOP ACTIVATED. All motion halted.')
+        elif cmd in ('return_home', 'abort', 'rtb'):
+            self._estop = False
+            self._rtb = True
+            self._steps = []
+            self._active = None
+            self._rtb_husky_done = False
+            self._rtb_retry_at = 0.0
+            if self._active_goal_handle is not None:
+                try:
+                    self._active_goal_handle.cancel_goal_async()
+                except Exception:
+                    pass
+                self._active_goal_handle = None
+            self._goal_inflight = False
+            self.get_logger().warn('[MISSION CONTROL] RETURN HOME commanded. Returning both robots to base.')
+
+    def _fly_home(self) -> None:
+        if self._parrot is None:
+            self._cmd.publish(Twist())
+            return
+        x, y, z, yaw = self._parrot
+        tx, ty, tz = ROOF_SPAWN_XYZ
+        tyaw = 0.0
+        ex, ey, ez = tx - x, ty - y, tz - z
+        dist = math.sqrt(ex * ex + ey * ey + ez * ez)
+        eyaw = _yaw_err(tyaw, yaw)
+        c, s = math.cos(yaw), math.sin(yaw)
+        cmd = Twist()
+        if dist < 0.6:
+            self._cmd.publish(Twist())
+            return
+        cmd.linear.x = max(-1.0, min(1.0, 0.6 * (c * ex + s * ey)))
+        cmd.linear.y = max(-1.0, min(1.0, 0.6 * (-s * ex + c * ey)))
+        cmd.linear.z = max(-0.8, min(0.8, 0.8 * ez))
+        cmd.angular.z = max(-1.0, min(1.0, 1.2 * eyaw))
+        self._cmd.publish(cmd)
+
+    def _step_husky_home(self) -> None:
+        if self._rtb_husky_done:
+            self._husky_cmd.publish(Twist())
+            return
+        if self._husky is not None:
+            dist = math.hypot(self._husky[0] - 0.0, self._husky[1] - 0.0)
+            if dist < 1.0:
+                self._husky_cmd.publish(Twist())
+                self._rtb_husky_done = True
+                self.get_logger().info('[MISSION CONTROL] Husky safely arrived back at base origin (0, 0).')
+                return
+        if self._goal_inflight:
+            return
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if now < self._rtb_retry_at:
+            return
+        self._rtb_retry_at = now + 3.0
+        self._send_husky_home()
+
+    def _send_husky_home(self) -> None:
+        if not self._nav.wait_for_server(timeout_sec=0.5):
+            self.get_logger().warn('Nav2 not ready for Return Home (will retry).')
+            return
+        goal = NavigateToPose.Goal()
+        goal.pose = PoseStamped()
+        goal.pose.header.frame_id = 'husky1_map'
+        goal.pose.header.stamp = self.get_clock().now().to_msg()
+        goal.pose.pose.position.x = 0.0
+        goal.pose.pose.position.y = 0.0
+        goal.pose.pose.position.z = 0.0
+        qz, qw = _yaw_to_quat(0.0)
+        goal.pose.pose.orientation.z = qz
+        goal.pose.pose.orientation.w = qw
+        self.get_logger().info('Dispatching Husky back to home origin (0.0, 0.0)')
+        self._goal_inflight = True
+        future = self._nav.send_goal_async(goal)
+        future.add_done_callback(self._on_rtb_accept)
+
+    def _on_rtb_accept(self, future) -> None:
+        try:
+            handle = future.result()
+            self._active_goal_handle = handle
+        except Exception as exc:
+            self._goal_inflight = False
+            self._active_goal_handle = None
+            self.get_logger().error('Nav2 RTB goal send failed: %s' % exc)
+            return
+        if handle is None or not handle.accepted:
+            self._goal_inflight = False
+            self._active_goal_handle = None
+            self.get_logger().warn('Nav2 rejected RTB goal (will retry).')
+            return
+        self.get_logger().info('Nav2 accepted Return Home goal. Navigating to base origin.')
+        handle.get_result_async().add_done_callback(self._on_rtb_nav)
+
+    def _on_rtb_nav(self, future) -> None:
+        self._goal_inflight = False
+        self._active_goal_handle = None
+        try:
+            ok = future.result().status == GoalStatus.STATUS_SUCCEEDED
+        except Exception as exc:
+            self.get_logger().error('Nav2 RTB result error: %s' % exc)
+            return
+        if ok:
+            self._rtb_husky_done = True
+            self.get_logger().info('[MISSION CONTROL] Husky successfully navigated to base origin.')
+            self._husky_cmd.publish(Twist())
+        else:
+            self.get_logger().warn('Nav2 RTB goal finished without success (will check distance/retry).')
 
     def _on_ice_placed(self, msg: String) -> None:
         if ice_place_succeeded(msg.data):
@@ -640,18 +776,23 @@ class HuskyPinView(Node):
         if not self._tour_released:
             self._cmd.publish(Twist())
             pose = None if self._parrot is None else self._parrot[:3]
-            if tour_may_start(
-                    self._tour_gate, self._sim_time_s(), pose, self._ice_placed):
-                self._tour_released = True
-                self.get_logger().info(
-                    'Gazebo pose is steady and ice is placed. '
-                    'Starting the cable tour.')
-            else:
+            ready = tour_may_start(
+                self._tour_gate, self._sim_time_s(), pose, self._ice_placed)
+            if not ready:
                 if not self._tour_wait_logged:
                     self.get_logger().info(
                         'Waiting for Gazebo and ice placement.')
                     self._tour_wait_logged = True
                 return
+            if self._require_operator_start and not self._operator_started:
+                if not self._op_wait_logged:
+                    self.get_logger().info(
+                        '[MISSION CONTROL] Ready on helipad. Waiting for operator START command from console...')
+                    self._op_wait_logged = True
+                return
+            self._tour_released = True
+            self.get_logger().info(
+                'Gazebo steady & ice placed. Mission authorized. Starting the cable tour.')
         if self._patrol_index >= len(self._patrol):
             self._cmd.publish(Twist())
             return
@@ -935,13 +1076,16 @@ class HuskyPinView(Node):
     def _on_accept(self, future) -> None:
         try:
             handle = future.result()
+            self._active_goal_handle = handle
         except Exception as exc:
             self._goal_inflight = False
+            self._active_goal_handle = None
             self.get_logger().error('Nav2 goal send failed: %s' % exc)
             self._give_up()
             return
         if handle is None or not handle.accepted:
             self._goal_inflight = False
+            self._active_goal_handle = None
             self.get_logger().warn('Nav2 rejected the step.')
             self._give_up()
             return
@@ -949,6 +1093,7 @@ class HuskyPinView(Node):
 
     def _on_nav(self, future) -> None:
         self._goal_inflight = False
+        self._active_goal_handle = None
         try:
             ok = future.result().status == GoalStatus.STATUS_SUCCEEDED
         except Exception as exc:
@@ -1235,6 +1380,14 @@ class HuskyPinView(Node):
         self._targets.publish(String(data=json.dumps(data)))
 
     def _tick(self) -> None:
+        if self._estop:
+            self._cmd.publish(Twist())
+            self._husky_cmd.publish(Twist())
+            return
+        if self._rtb:
+            self._fly_home()
+            self._step_husky_home()
+            return
         self._watch_rock_gates()
         if self._phase == Phase.DONE:
             self._cmd.publish(Twist())

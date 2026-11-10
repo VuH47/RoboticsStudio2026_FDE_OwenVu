@@ -8,3 +8,6 @@ build/
 install/
 log/
 .DS_Store
+doc/
+html/
+latex/
