@@ -1,4 +1,4 @@
-/** \mainpage Robotics Studio 1 (41068) — Alpine Ice Perception & Mission System
+/** \mainpage Robotics Studio 1
 
 @tableofcontents
 
@@ -225,6 +225,6 @@ python3 -m pytest test/
 - **Subject**: Robotics Studio 1 (41068)
 - **Project**: Alpine Ice Perception & Mission System
 - **Authors**: Vu (Minh) & Owen
-- **Course Coordinator**: Dr. Alen Alempijevic
+
 
 */
