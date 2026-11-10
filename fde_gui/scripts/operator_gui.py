@@ -40,7 +40,6 @@ from operator_interface.widgets.operations.live_operations import LiveOperations
 from operator_interface.widgets.hazards.documented_hazards import (
     DocumentedHazards,
 )
-from operator_interface.widgets.map.map_tool_panel import MapToolPanel
 from operator_interface.widgets.map.selected_hazard_panel import SelectedHazardPanel
 from operator_interface.widgets.missions.mission_progress import MissionProgress
 from operator_interface.database.mission_database import MissionDatabase
@@ -77,7 +76,6 @@ from operator_interface.widgets.map.manual_waypoint_dialog import (
     ManualWaypointDialog,
 )
 import math
-from vtkmodules.vtkRenderingCore import vtkCellPicker
 
 
 # =========================================================
@@ -99,6 +97,7 @@ class OperatorRosNode(Node):
         )
 
         self.mission_progress_callback_gui = None
+        self.mission_state_callback_gui = None
         self.command_pub = self.create_publisher(
             String,
             "/fde/mission_command",
@@ -129,7 +128,10 @@ class OperatorRosNode(Node):
 )
         self.get_logger().info("PySide6 operator GUI started")
     def mission_state_callback(self, msg):
+        previous = self.mission_state
         self.mission_state = msg.data
+        if self.mission_state_callback_gui is not None and previous != msg.data:
+            self.mission_state_callback_gui(msg.data)
     def detection_callback(self, msg):
         self.latest_detection = msg
 
@@ -214,7 +216,7 @@ class MissionMapView(QGraphicsView):
 # =========================================================
 class OperatorGUI(QMainWindow):
     STATUS_COLOURS = {
-        "Detected": "#ffc107",
+        "Inconclusive": "#ffc107",
         "Husky Required": "#ffa16b",
         "In Progress": "#2f80c9",
         "Resolved / Safe": "#49ad2f",
@@ -251,9 +253,18 @@ class OperatorGUI(QMainWindow):
             self.mission_run_id,
         )
 
-        self.ros_node.targets_callback_gui = (
-            self.ros_target_sync.process
-        )
+        self.ros_node.targets_callback_gui = self.process_target_update
+        self.ros_node.mission_state_callback_gui = self.on_mission_state_event
+        self._last_target_states = {}
+        self._last_progress_event = None
+        self._robot_motion = {}
+
+        # Image evidence: one camera snapshot per newly observed ROS target.
+        # Files persist across GUI restarts and are keyed by the full hazard ID.
+        self.snapshot_dir = Path.home() / ".local" / "share" / "fde_gui" / "hazard_snapshots"
+        self._latest_drone_frame = None  # (QImage, monotonic_time, source)
+        self._pending_snapshots = {}      # hazard_id -> first_observed_time
+        self._snapshot_seen_targets = set()
 
         self.hazards = self.hazard_store.get_all()
 
@@ -319,9 +330,7 @@ class OperatorGUI(QMainWindow):
         layout.addLayout(
             header
         )
-        self.ros_node.mission_progress_callback_gui = (
-            self.mission_progress.process_event
-        )
+        self.ros_node.mission_progress_callback_gui = self.on_mission_progress_event
         # Live Gazebo world map, sharing the existing WaypointStore.
         self.map_view = Map3DWidget(
             repo_root=PACKAGE_ROOT.parent,
@@ -339,7 +348,6 @@ class OperatorGUI(QMainWindow):
         # Marker refresh must never cover floating controls.
         self.map_view.marker_overlay.on_refresh = self.refresh_map_overlays
         self.create_map_overlay()
-        self.create_map_tool_panel()
         self.create_selected_hazard_overlay()
         # Drone / Husky / Both map selector
         robot_selector = QHBoxLayout()
@@ -376,6 +384,9 @@ class OperatorGUI(QMainWindow):
         return panel
 
     def on_start_mission(self):
+        self._last_target_states.clear()
+        self._last_progress_event = None
+        self.append_robot_log("SYSTEM", "Operator requested mission start")
         if hasattr(self, "hazard_store"):
             self.hazard_store.clear_all()
         if hasattr(self, "ros_node"):
@@ -385,77 +396,10 @@ class OperatorGUI(QMainWindow):
     def refresh_map_overlays(self):
         """Keep floating GUI panels above all SVG markers and number labels."""
         self.map_view.waypoint_markers.update_label_positions()
-        for name in ("map_overlay", "map_tool_panel", "selected_hazard_panel"):
+        for name in ("map_overlay", "selected_hazard_panel"):
             panel = getattr(self, name, None)
             if panel is not None:
                 panel.raise_()
-
-    def pick_map_position(self, screen_x, screen_y):
-        """Convert a viewport click into a Gazebo world position."""
-        renderer = self.map_view.plotter.renderer
-        viewport = self.map_view.plotter.interactor
-        vtk_x = float(screen_x)
-        vtk_y = float(viewport.height() - screen_y - 1)
-
-        picker = vtkCellPicker()
-        picker.SetTolerance(0.0005)
-        if picker.Pick(vtk_x, vtk_y, 0.0, renderer):
-            x, y, z = picker.GetPickPosition()
-            return float(x), float(y), float(z)
-
-        # Fallback: intersect the camera ray with the z=0 ground plane.
-        ray = []
-        for depth in (0.0, 1.0):
-            renderer.SetDisplayPoint(vtk_x, vtk_y, depth)
-            renderer.DisplayToWorld()
-            wx, wy, wz, w = renderer.GetWorldPoint()
-            if abs(w) < 1e-9:
-                return None
-            ray.append((wx / w, wy / w, wz / w))
-        near, far = ray
-        dz = far[2] - near[2]
-        if abs(dz) < 1e-9:
-            return None
-        t = -near[2] / dz
-        if not 0.0 <= t <= 1.0:
-            return None
-        return (near[0] + t * (far[0] - near[0]),
-                near[1] + t * (far[1] - near[1]), 0.0)
-
-    def on_map_clicked(self, screen_x, screen_y):
-        """Add or remove a waypoint with the currently selected map tool."""
-        mode = getattr(self, "current_map_tool_mode", "select")
-        if mode == "remove":
-            nearest = None
-            best_distance = 24.0 ** 2
-            for robot, waypoints in (
-                ("drone", self.waypoint_store.get_drone_waypoints()),
-                ("husky", self.waypoint_store.get_husky_waypoints()),
-            ):
-                for index, wp in enumerate(waypoints):
-                    sx, sy = self.map_view.marker_overlay.world_to_screen(
-                        wp["x"], wp["y"], wp.get("z", 0.0) + 1.0
-                    )
-                    distance = (sx - screen_x) ** 2 + (sy - screen_y) ** 2
-                    if distance < best_distance:
-                        nearest = (robot, index)
-                        best_distance = distance
-            if nearest is not None:
-                self.waypoint_store.delete_waypoint(*nearest)
-                self.map_tool_panel.reset_to_select()
-            return
-
-        if mode not in ("add_drone", "add_husky"):
-            return
-        position = self.pick_map_position(screen_x, screen_y)
-        if position is None:
-            return
-        x, y, z = position
-        robot = "drone" if mode == "add_drone" else "husky"
-        self.waypoint_store.add_manual_waypoint(
-            robot=robot, x=x, y=y, z=0.0
-        )
-        self.map_tool_panel.reset_to_select()
 
     # =====================================================
     # MAP OVERLAYS
@@ -468,13 +412,53 @@ class OperatorGUI(QMainWindow):
             layer_callback=self.set_layer_visible,
             parent=self.map_view.plotter.interactor,
         )
-    def create_map_tool_panel(self):
-        self.map_tool_panel = MapToolPanel(
-            parent=self.map_view.plotter.interactor,
+
+        legend = self.map_overlay.legend_panel
+
+        # Hazard status filters
+        self.status_switches = {
+            "Inconclusive": legend.detected_check,
+            "Husky Required": legend.husky_required_check,
+            "In Progress": legend.in_progress_check,
+            "Resolved / Safe": legend.resolved_check,
+            "Confirmed Hazard": legend.confirmed_check,
+        }
+
+        # Hazard type filters
+        self.type_switches = {
+            "ice": legend.line_ice_check,
+            "ice on line": legend.line_ice_check,
+        }
+
+        # Refresh marker visibility whenever a switch changes.
+        switches = [
+            legend.hazard_status_check,
+            legend.hazard_layer_check,
+            *self.status_switches.values(),
+            *self.type_switches.values(),
+        ]
+
+        for switch in set(switches):
+            switch.toggled.connect(lambda _checked: self.sync_hazard_markers())
+
+        # Individual robot markers must respect both their own toggle and
+        # the parent Drone/Husky toggle. The parent toggles are already wired
+        # to set_layer_visible by LegendPanel.
+        robot_children = (
+            legend.drone_location_check,
+            legend.drone_waypoint_check,
+            legend.drone_home_check,
+            legend.husky_location_check,
+            legend.husky_waypoint_check,
+            legend.husky_home_check,
         )
-        self.map_tool_panel.mode_changed.connect(
-            self.set_map_tool_mode
-        )
+        for switch in robot_children:
+            switch.toggled.connect(
+                lambda _checked: self.apply_robot_layer_filters()
+            )
+
+        # Initialise visibility from the actual legend state.
+        self.apply_robot_layer_filters()
 
     def create_selected_hazard_overlay(self):
         self.selected_hazard_panel = SelectedHazardPanel(
@@ -489,7 +473,7 @@ class OperatorGUI(QMainWindow):
         )
     def position_map_overlays(self):
         if not all(hasattr(self, name) for name in (
-            "map_view", "map_overlay", "map_tool_panel", "selected_hazard_panel"
+            "map_view", "map_overlay", "selected_hazard_panel"
         )):
             return
         viewport = self.map_view.plotter.interactor
@@ -511,20 +495,6 @@ class OperatorGUI(QMainWindow):
             left=10,
         )
         # =====================================================
-        # TOP-RIGHT MAP TOOL PANEL
-        # =====================================================
-        tool_width = 155
-        tool_height = 132
-        tool_x = max(10, width - tool_width - 12)
-        tool_y = 10
-        if hasattr(self, "map_tool_panel"):
-            self.map_tool_panel.setGeometry(
-                tool_x,
-                tool_y,
-                tool_width,
-                tool_height,
-            )
-        # =====================================================
         # SELECTED HAZARD OVERLAY
         # =====================================================
         quick_width = min(
@@ -539,8 +509,8 @@ class OperatorGUI(QMainWindow):
             10,
             width - quick_width - 12,
         )
-        # Position underneath map tools
-        quick_y = tool_y + tool_height + 8
+        # Position near the top-right now that the map tool panel is removed.
+        quick_y = 10
         self.selected_hazard_panel.setGeometry(
             quick_x,
             quick_y,
@@ -554,18 +524,50 @@ class OperatorGUI(QMainWindow):
     # =====================================================
     # MAP CONTENT
     # =====================================================
+    def apply_robot_layer_filters(self):
+        """Apply master AND child switches to each robot marker layer."""
+        legend = self.map_overlay.legend_panel
+
+        robot_layers = {
+            "drone": {
+                "drone_location": legend.drone_location_check,
+                "drone_waypoint": legend.drone_waypoint_check,
+                "drone_home": legend.drone_home_check,
+            },
+            "husky": {
+                "husky_location": legend.husky_location_check,
+                "husky_waypoint": legend.husky_waypoint_check,
+                "husky_home": legend.husky_home_check,
+            },
+        }
+
+        for robot_name, children in robot_layers.items():
+            master = (
+                legend.drone_layer_check if robot_name == "drone"
+                else legend.husky_layer_check
+            )
+            for layer_name, child_switch in children.items():
+                self.map_view.set_layer_visible(
+                    layer_name,
+                    master.isChecked() and child_switch.isChecked(),
+                )
+
     def set_layer_visible(self, layer_name, visible):
-        """Translate existing legend layer names to 3D SVG layers."""
-        if layer_name == "drone":
-            for name in ("drone_location", "drone_home", "drone_waypoint"):
-                self.map_view.set_layer_visible(name, visible)
-        elif layer_name == "husky":
-            for name in ("husky_location", "husky_home", "husky_waypoint"):
-                self.map_view.set_layer_visible(name, visible)
-        else:
+        """Handle legend layer changes while preserving child toggle states."""
+        robot_layers = {
+            "drone", "husky",
+            "drone_location", "drone_waypoint", "drone_home",
+            "husky_location", "husky_waypoint", "husky_home",
+        }
+        if layer_name in robot_layers:
+            self.apply_robot_layer_filters()
+        elif layer_name != "hazards":
             self.map_view.set_layer_visible(layer_name, visible)
+        # Hazard marker visibility is controlled separately by
+        # sync_hazard_markers(), with status and type filters combined.
 
     def set_map_robot_view(self, view_name):
+        """Synchronise Drone/Husky/Both buttons with legend master toggles."""
         for button, name in (
             (self.map_drone_button, "Drone"),
             (self.map_husky_button, "Husky"),
@@ -574,33 +576,21 @@ class OperatorGUI(QMainWindow):
             button.blockSignals(True)
             button.setChecked(name == view_name)
             button.blockSignals(False)
-        show_drone = view_name in (
-            "Drone",
-            "Both",
-        )
-        show_husky = view_name in (
-            "Husky",
-            "Both",
-        )
-        self.set_layer_visible(
-            "drone",
-            show_drone,
-        )
-        self.set_layer_visible(
-            "husky",
-            show_husky,
-        )
+
+        show_drone = view_name in ("Drone", "Both")
+        show_husky = view_name in ("Husky", "Both")
         legend = self.map_overlay.legend_panel
+
+        # The legend master switches already have their own callbacks;
+        # suppress those briefly and apply the combined state once.
         legend.drone_layer_check.blockSignals(True)
         legend.husky_layer_check.blockSignals(True)
-        legend.drone_layer_check.setChecked(
-            show_drone
-        )
-        legend.husky_layer_check.setChecked(
-            show_husky
-        )
+        legend.drone_layer_check.setChecked(show_drone)
+        legend.husky_layer_check.setChecked(show_husky)
         legend.drone_layer_check.blockSignals(False)
         legend.husky_layer_check.blockSignals(False)
+        self.apply_robot_layer_filters()
+
     # =====================================================
     # HAZARD SELECTION / STATE
     # =====================================================
@@ -644,13 +634,107 @@ class OperatorGUI(QMainWindow):
     def update_outcome_counts(self):
         self.mission_summary.update_outcomes(self.hazards)
 
+    def hazard_marker_visible(self, hazard):
+
+        legend = self.map_overlay.legend_panel
+
+        # Master switches
+        if not legend.hazard_status_check.isChecked():
+            return False
+
+        if not legend.hazard_layer_check.isChecked():
+            return False
+
+        # Hazard status
+        status = str(
+            hazard.get("status") or "Inconclusive"
+        ).strip()
+
+        status_switch = self.status_switches.get(status)
+
+        if status_switch is None:
+            return False
+
+        if not status_switch.isChecked():
+            return False
+
+        # Hazard type
+        hazard_type = str(
+            hazard.get("type") or ""
+        ).strip().lower()
+
+        type_switch = self.type_switches.get(hazard_type)
+
+        if type_switch is None:
+            return False
+
+        if not type_switch.isChecked():
+            return False
+
+        return True
+
+    def update_hazard_status_indicator(
+        self,
+        marker_id,
+        status,
+    ):
+        overlay = self.map_view.marker_overlay
+
+        marker = overlay.markers.get(marker_id)
+
+        if marker is None:
+            return
+
+        widget = marker["widget"]
+
+        # Create status indicator if it doesn't exist.
+        badge = getattr(widget, "status_badge", None)
+
+        if badge is None:
+
+            badge = QLabel("●", widget)
+
+            badge.setFixedSize(14, 14)
+
+            badge.setAlignment(Qt.AlignCenter)
+
+            badge.setAttribute(
+                Qt.WA_TransparentForMouseEvents,
+                True,
+            )
+
+            widget.status_badge = badge
+
+        colour = self.STATUS_COLOURS.get(
+            status,
+            "#ffffff",
+        )
+
+        badge.setStyleSheet(
+            f"""
+            QLabel {{
+                color: {colour};
+                font-size: 15px;
+                background: transparent;
+            }}
+            """
+        )
+
+        # Bottom-right corner of the existing SVG.
+        badge.move(
+            widget.width() - badge.width(),
+            widget.height() - badge.height(),
+        )
+
+        badge.show()
+        badge.raise_()
+
     def sync_hazard_markers(self):
-        """Synchronise database hazards with their 3D map SVG markers."""
+        """Synchronise database hazards with filtered 3D SVG markers."""
         overlay = self.map_view.marker_overlay
         icon_dir = PACKAGE_ROOT / "assets" / "hazard_icons"
 
-        # HazardStore supplies the type stored in the SQLite database.
-        # RosTargetSync currently creates drone targets with type "Ice".
+        # Match hazard types from the database to existing SVG assets.
         icon_files = {
             "ice": "line_ice.svg",
             "ice on line": "line_ice.svg",
@@ -687,8 +771,8 @@ class OperatorGUI(QMainWindow):
             active_ids.add(marker_id)
             icon_key = str(icon_path)
 
-            # MarkerOverlay fixes the SVG when a marker is created.
-            # Recreate it if a hazard's type (and icon) changes.
+            # MarkerOverlay fixes the icon when created. Replace only if
+            # the underlying hazard type / SVG asset changes.
             if (marker_id in overlay.markers
                     and self.hazard_markers.get(marker_id) != icon_key):
                 overlay.remove_marker(marker_id)
@@ -700,9 +784,19 @@ class OperatorGUI(QMainWindow):
                     size=24,
                 )
 
+            status = str(hazard.get("status") or "Inconclusive").strip()
+            self.update_hazard_status_indicator(marker_id, status)
+
+            widget = overlay.markers[marker_id]["widget"]
+            widget.setToolTip(
+                f"{hazard_id} | {hazard.get('type', 'Unknown')} | {status}"
+            )
+
             overlay.set_position(marker_id, x, y, z)
+            overlay.set_visible(marker_id, self.hazard_marker_visible(hazard))
             self.hazard_markers[marker_id] = icon_key
 
+        # Remove markers whose records disappeared or became invalid.
         for marker_id in list(self.hazard_markers):
             if marker_id not in active_ids:
                 overlay.remove_marker(marker_id)
@@ -807,6 +901,178 @@ class OperatorGUI(QMainWindow):
         self.documented_hazards.show_hazard(hazard_id)
 
     # =====================================================
+    # LIVE ROBOT ACTION LOGS (EVENT DRIVEN)
+    # =====================================================
+    def append_robot_log(self, robot, message):
+        """Append an event observed from ROS, with a local timestamp."""
+        stamp = time.strftime("%H:%M:%S")
+        self.append_log(f"[{stamp}] [{robot}] {message}")
+
+    def log_robot_motion(self, robot, x, y, velocity, altitude=None):
+        """Log actual odometry activity without spamming on every ROS update."""
+        now = time.monotonic()
+        record = self._robot_motion.get(robot)
+        moving = velocity >= 0.35
+
+        if record is None:
+            self.append_robot_log(
+                robot, f"Odometry received at X={x:.1f}, Y={y:.1f}"
+            )
+            record = {"moving": False, "last_log": now, "x": x, "y": y}
+            self._robot_motion[robot] = record
+
+        if moving != record["moving"]:
+            if moving:
+                self.append_robot_log(
+                    robot,
+                    f"Movement detected: {velocity:.1f} m/s at X={x:.1f}, Y={y:.1f}"
+                )
+            else:
+                self.append_robot_log(
+                    robot, f"Robot stationary at X={x:.1f}, Y={y:.1f}"
+                )
+            record.update(moving=moving, last_log=now, x=x, y=y)
+            return
+
+        distance = math.hypot(x - record["x"], y - record["y"])
+        if moving and now - record["last_log"] >= 15.0 and distance >= 2.0:
+            detail = f"Moving: {velocity:.1f} m/s, X={x:.1f}, Y={y:.1f}"
+            if altitude is not None:
+                detail += f", relative alt={altitude:.1f} m"
+            self.append_robot_log(robot, detail)
+            record.update(last_log=now, x=x, y=y)
+
+    def queue_new_target_snapshots(self, data):
+        """Capture evidence only once, when a ROS ice target first appears."""
+        if not isinstance(data, dict):
+            return
+        targets = data.get("targets", [])
+        if not isinstance(targets, list):
+            return
+
+        now = time.monotonic()
+        for target in targets:
+            if not isinstance(target, dict):
+                continue
+            target_id = str(target.get("id", "")).strip()
+            if not (target_id.startswith("T") and target_id[1:].isdigit()):
+                continue
+            # RosTargetSync ignores targets without finite world coordinates.
+            try:
+                coords = (float(target["x"]), float(target["y"]), float(target["z"]))
+                if not all(math.isfinite(v) for v in coords):
+                    continue
+            except (KeyError, TypeError, ValueError):
+                continue
+
+            hazard_id = f"H-ROS-{self.mission_run_id}-{target_id}"
+            if hazard_id in self._snapshot_seen_targets:
+                continue
+            self._snapshot_seen_targets.add(hazard_id)
+            destination = self.snapshot_dir / f"{hazard_id}.png"
+            if not destination.exists():
+                self._pending_snapshots[hazard_id] = now
+
+        self.capture_pending_snapshots()
+
+    def capture_pending_snapshots(self):
+        """Use a nearby camera frame; do not attach stale frames to hazards."""
+        if not self._pending_snapshots:
+            return
+
+        now = time.monotonic()
+        # Discard requests if no camera image arrives close to detection.
+        for hazard_id, detected_at in list(self._pending_snapshots.items()):
+            if now - detected_at > 3.0:
+                del self._pending_snapshots[hazard_id]
+
+        frame_record = self._latest_drone_frame
+        if frame_record is None:
+            return
+        frame, frame_time, source = frame_record
+        if now - frame_time > 1.5 or frame.isNull():
+            return
+
+        for hazard_id in list(self._pending_snapshots):
+            try:
+                self.snapshot_dir.mkdir(parents=True, exist_ok=True)
+                path = self.snapshot_dir / f"{hazard_id}.png"
+                if path.exists() or frame.save(str(path), "PNG"):
+                    del self._pending_snapshots[hazard_id]
+                    self.append_robot_log(
+                        "DRONE", f"Snapshot saved for {hazard_id} ({source})"
+                    )
+            except OSError as exc:
+                self.append_robot_log("DRONE", f"Snapshot save failed: {exc}")
+                del self._pending_snapshots[hazard_id]
+
+    def cache_drone_frame(self, msg, source):
+        """Cache the latest decoded QImage for the hazard evidence pipeline."""
+        img = self._imgmsg_to_qimage(msg)
+        if img is None or img.isNull():
+            return None
+        self._latest_drone_frame = (img, time.monotonic(), source)
+        self.capture_pending_snapshots()
+        return img
+
+    def on_mission_state_event(self, state):
+        state_text = str(state).strip()
+        if state_text:
+            self.append_robot_log("MISSION", f"State changed to {state_text}")
+
+    def on_mission_progress_event(self, message):
+        # Preserve the existing mission-progress widget updates.
+        self.mission_progress.process_event(message)
+        event = str(message).strip()
+        if event and event != self._last_progress_event:
+            self._last_progress_event = event
+            # Raw ROS event: do not infer unreported robot actions.
+            self.append_robot_log("MISSION", event)
+
+    def process_target_update(self, data):
+        """Synchronize target records and log only changes in target state."""
+        # Preserve the existing hazard synchronization.
+        self.ros_target_sync.process(data)
+        self.queue_new_target_snapshots(data)
+        if not isinstance(data, dict):
+            return
+        targets = data.get("targets", [])
+        if not isinstance(targets, list):
+            return
+
+        state_messages = {
+            "tracking": ("DRONE", "tracking ice target"),
+            "ready": ("DRONE", "ice target ready for Husky intervention"),
+            "active": ("HUSKY", "intervention active for ice target"),
+            "confirmed": ("HUSKY", "ice target confirmed"),
+            "not_confirmed": ("HUSKY", "ice target not confirmed"),
+            "inconclusive": ("HUSKY", "ice target assessment inconclusive"),
+            "missed": ("MISSION", "ice target missed"),
+        }
+        for target in targets:
+            if not isinstance(target, dict):
+                continue
+            target_id = str(target.get("id", "")).strip()
+            state = str(target.get("state", "")).strip().lower()
+            if not (target_id.startswith("T") and target_id[1:].isdigit()):
+                continue
+            if state not in state_messages:
+                continue
+            if self._last_target_states.get(target_id) == state:
+                continue
+            self._last_target_states[target_id] = state
+            robot, description = state_messages[state]
+            coords = ""
+            try:
+                x = float(target["x"])
+                y = float(target["y"])
+                if math.isfinite(x) and math.isfinite(y):
+                    coords = f" at X={x:.1f}, Y={y:.1f}"
+            except (KeyError, TypeError, ValueError):
+                pass
+            self.append_robot_log(robot, f"{description} {target_id}{coords}")
+
+    # =====================================================
     # ROS
     # =====================================================
     def process_ros(self):
@@ -820,7 +1086,13 @@ class OperatorGUI(QMainWindow):
             self.live_operations.update_timestamp()
     def append_log(self, text):
         if hasattr(self, "live_operations"):
+            log = self.live_operations.action_log
+            if log.toPlainText().strip() == "Waiting for mission...":
+                log.clear()
             self.live_operations.append_log(text)
+            # Bound log history to avoid unbounded growth during long missions.
+            document = log.document()
+            document.setMaximumBlockCount(500)
     # =====================================================
     # WINDOW EVENTS
     # =====================================================
@@ -829,7 +1101,7 @@ class OperatorGUI(QMainWindow):
         self.position_map_overlays()
 
         # Keep map controls above SVG markers and waypoint numbers.
-        for name in ("map_overlay", "map_tool_panel", "selected_hazard_panel"):
+        for name in ("map_overlay", "selected_hazard_panel"):
             panel = getattr(self, name, None)
             if panel is not None:
                 panel.raise_()
@@ -840,13 +1112,6 @@ class OperatorGUI(QMainWindow):
                 and watched is self.map_view.plotter.interactor):
             if event.type() == QEvent.Resize:
                 QTimer.singleShot(0, self.position_map_overlays)
-            elif (event.type() == QEvent.MouseButtonPress
-                  and event.button() == Qt.LeftButton
-                  and getattr(self, "current_map_tool_mode", "select")
-                  in ("add_drone", "add_husky", "remove")):
-                position = event.position()
-                self.on_map_clicked(position.x(), position.y())
-                return True
         return super().eventFilter(watched, event)
 
     def closeEvent(self, event):
@@ -917,13 +1182,14 @@ class OperatorGUI(QMainWindow):
 
     def drone_debug_camera_callback(self, msg):
         self.last_drone_debug_time = time.monotonic()
-        img = self._imgmsg_to_qimage(msg)
+        img = self.cache_drone_frame(msg, "detector debug")
         if img is not None:
             self.live_operations.update_drone_camera(img)
 
     def drone_raw_camera_callback(self, msg):
+        # Prefer annotated detector frames while they are available.
         if time.monotonic() - getattr(self, "last_drone_debug_time", 0.0) > 1.5:
-            img = self._imgmsg_to_qimage(msg)
+            img = self.cache_drone_frame(msg, "raw camera")
             if img is not None:
                 self.live_operations.update_drone_camera(img)
 
@@ -976,6 +1242,7 @@ class OperatorGUI(QMainWindow):
             velocity,
             heading,
         )
+        self.log_robot_motion("HUSKY", x, y, velocity)
 
     def drone_odometry_callback(self, msg):
 
@@ -1009,18 +1276,7 @@ class OperatorGUI(QMainWindow):
             velocity,
             heading,
         )
-
-    def set_map_tool_mode(self, mode):
-        self.current_map_tool_mode = mode
-
-        if mode == "select":
-            self.map_view.plotter.interactor.setCursor(Qt.ArrowCursor)
-
-        elif mode in ("add_drone", "add_husky"):
-            self.map_view.plotter.interactor.setCursor(Qt.CrossCursor)
-
-        elif mode == "remove":
-            self.map_view.plotter.interactor.setCursor(Qt.CrossCursor)
+        self.log_robot_motion("DRONE", x, y, velocity, relative_altitude)
 
     def open_manual_waypoint_dialog(
         self,

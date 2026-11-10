@@ -115,7 +115,7 @@ class HazardList(QFrame):
     # ---------------------------------------------------------
 
     STATUS_COLOURS = {
-        "Detected": "#ffbd16",
+        "Inconclusive": "#ffbd16",
         "Husky Required": "#ff9966",
         "In Progress": "#4a9cdc",
         "Resolved / Safe": "#49ad2f",
@@ -129,21 +129,24 @@ class HazardList(QFrame):
     # ---------------------------------------------------------
 
     HAZARD_ICONS = {
-        "Slippery Ice":
-            "hazard_icons/slippery_ice.svg",
-
-        "No / Low Snow":
-            "hazard_icons/low_snow.svg",
-
-        "Low Snow":
-            "hazard_icons/low_snow.svg",
-
-        "Wood Debris":
-            "hazard_icons/wood_debris.svg",
-
-        "Stone Debris":
-            "hazard_icons/stone_debris.svg",
+        # ROS detection records use "Ice"; the GUI calls it "Ice on Line".
+        "ice": "hazard_icons/line_ice.svg",
+        "ice on line": "hazard_icons/line_ice.svg",
+        # Retain legacy icon support without showing obsolete type filters.
+        "slippery ice": "hazard_icons/slippery_ice.svg",
+        "no / low snow": "hazard_icons/low_snow.svg",
+        "low snow": "hazard_icons/low_snow.svg",
+        "wood debris": "hazard_icons/wood_debris.svg",
+        "stone debris": "hazard_icons/stone_debris.svg",
     }
+
+    @staticmethod
+    def _display_hazard_type(hazard_type):
+        """Use a consistent UI name for ROS ice detections."""
+        value = str(hazard_type or "").strip()
+        if value.casefold() in ("ice", "ice on line"):
+            return "Ice on Line"
+        return value or "Unknown Hazard"
 
     def __init__(
         self,
@@ -230,7 +233,7 @@ class HazardList(QFrame):
 
         self.status_filter.addItems([
             "All Statuses",
-            "Detected",
+            "Inconclusive",
             "Husky Required",
             "In Progress",
             "Resolved / Safe",
@@ -269,10 +272,7 @@ class HazardList(QFrame):
 
         self.type_filter.addItems([
             "All Types",
-            "Slippery Ice",
-            "No / Low Snow",
-            "Wood Debris",
-            "Stone Debris",
+            "Ice on Line",
         ])
 
         self.type_filter.currentTextChanged.connect(
@@ -470,7 +470,7 @@ class HazardList(QFrame):
             if (
                 type_filter
                 != "All Types"
-                and hazard["type"]
+                and self._display_hazard_type(hazard.get("type"))
                 != type_filter
             ):
                 continue
@@ -622,31 +622,15 @@ class HazardList(QFrame):
             )
         )
 
-        status_dot = QLabel(
-            "●"
-        )
-
-        status_dot.setObjectName(
-            "hazardStatusDot"
-        )
-
-        status_dot.setFixedSize(
-            24,
-            32,
-        )
-
-        status_dot.setAlignment(
-            Qt.AlignCenter
-        )
-
+        # Draw a status circle using Qt styles rather than a Unicode
+        # bullet, which can render as a question mark on some systems.
+        status_dot = QLabel("")
+        status_dot.setObjectName("hazardStatusDot")
+        status_dot.setFixedSize(20, 20)
         status_dot.setStyleSheet(
-            f"""
-            QLabel {{
-                color: {status_colour};
-                font-size: 27px;
-                background: transparent;
-            }}
-            """
+            f"background-color: {status_colour}; "
+            "border-radius: 10px; "
+            "border: none;"
         )
 
         main.addWidget(
@@ -689,19 +673,28 @@ class HazardList(QFrame):
             1
         )
 
-        hazard_id_label = QLabel(
-            hazard_id
-        )
+        # Split long ROS hazard IDs across two lines
+        display_id = hazard_id
 
-        hazard_id_label.setObjectName(
-            "hazardCardId"
-        )
+        if len(hazard_id) > 17 and "-" in hazard_id:
+            prefix, suffix = hazard_id.rsplit("-", 1)
+            display_id = f"{prefix}\n{suffix}"
+
+        hazard_id_label = QLabel(display_id)
+        hazard_id_label.setObjectName("hazardCardId")
+
+        hazard_id_label.setWordWrap(True)
+        hazard_id_label.setStyleSheet("""
+            QLabel {
+                font-size: 11px;
+                font-weight: bold;
+            }
+        """)
+
+        hazard_id_label.setToolTip(hazard_id)
 
         hazard_type_label = QLabel(
-            hazard.get(
-                "type",
-                "Unknown Hazard",
-            )
+            self._display_hazard_type(hazard.get("type"))
         )
 
         hazard_type_label.setObjectName(
@@ -742,7 +735,7 @@ class HazardList(QFrame):
         # ---------------------------------------------------------
 
         chevron = QLabel(
-            "›"
+            ":"
         )
 
         chevron.setObjectName(
@@ -806,7 +799,7 @@ class HazardList(QFrame):
 
         relative_path = (
             self.HAZARD_ICONS.get(
-                hazard_type
+                str(hazard_type or "").strip().casefold()
             )
         )
 
@@ -927,9 +920,9 @@ class HazardList(QFrame):
         if (
             value is None
             or value == ""
-            or value == "—"
+            or value == "_"
         ):
-            return "—"
+            return "_"
 
         try:
 

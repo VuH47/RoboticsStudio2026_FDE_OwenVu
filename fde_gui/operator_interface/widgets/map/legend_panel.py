@@ -205,12 +205,6 @@ class LegendPanel(QWidget):
             image="drone_icons/drone_location.svg",
         )
 
-        self.drone_path_check = self._add_item(
-            legend_layout,
-            "Drone Pathing",
-            image="drone_icons/drone_path.svg",
-        )
-
         self.drone_waypoint_check = self._add_item(
             legend_layout,
             "Drone Waypoint",
@@ -240,12 +234,6 @@ class LegendPanel(QWidget):
             image="husky_icons/husky_location.svg",
         )
 
-        self.husky_path_check = self._add_item(
-            legend_layout,
-            "Husky Pathing",
-            image="husky_icons/husky_path.svg",
-        )
-
         self.husky_waypoint_check = self._add_item(
             legend_layout,
             "Husky Waypoint",
@@ -271,8 +259,8 @@ class LegendPanel(QWidget):
 
         self.detected_check = self._add_item(
             legend_layout,
-            "Detected",
-            colour=self.status_colours["Detected"],
+            "Inconclusive",
+            colour=self.status_colours["Inconclusive"],
         )
 
         self.husky_required_check = self._add_item(
@@ -320,12 +308,6 @@ class LegendPanel(QWidget):
             legend_layout,
             "Ice on Line",
             image="../hazard_icons/line_ice.svg",
-        )
-
-        self.ground_hazard_check = self._add_item(
-            legend_layout,
-            "Ground Hazard",
-            image="../hazard_icons/ground_hazard.svg",
         )
 
         legend_layout.addStretch()

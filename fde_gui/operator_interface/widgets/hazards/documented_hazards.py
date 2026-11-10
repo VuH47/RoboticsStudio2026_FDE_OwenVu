@@ -167,7 +167,7 @@ class DocumentedHazards(QWidget):
         # SEND TO HUSKY
         # ---------------------------------------------------------
 
-        if status == "Detected":
+        if status == "Inconclusive":
 
             # Update hazard state first.
             self.hazard_store.send_husky(

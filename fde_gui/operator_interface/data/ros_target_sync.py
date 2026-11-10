@@ -1,15 +1,14 @@
-
 import math
 
 
 STATE_TO_STATUS = {
-    "tracking": "Detected",
-    "ready": "Detected",
+    "tracking": "Inconclusive",
+    "ready": "Husky Required",
     "active": "In Progress",
     "confirmed": "Confirmed Hazard",
     "not_confirmed": "Resolved / Safe",
-    "inconclusive": "Detected",
-    "missed": "Detected",
+    "inconclusive": "Inconclusive",
+    "missed": "Inconclusive",
 }
 
 
@@ -56,7 +55,7 @@ class RosTargetSync:
 
             state = str(
                 target.get("state", "tracking")
-            ).lower()
+            ).strip().lower()
 
             if state not in STATE_TO_STATUS:
                 continue

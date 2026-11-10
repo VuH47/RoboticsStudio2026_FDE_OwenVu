@@ -1,5 +1,6 @@
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
+from pathlib import Path
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -10,6 +11,39 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+
+class EvidencePhoto(QLabel):
+    """Scale a saved detection image to fit, preserving its aspect ratio."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._original = None
+
+    def set_snapshot(self, path):
+        pixmap = QPixmap(str(path))
+        if pixmap.isNull():
+            self._original = None
+            self.clear()
+            self.setText("Detection Snapshot\n\n[ Image unavailable ]")
+            return
+        self._original = pixmap
+        self._render_snapshot()
+
+    def show_placeholder(self):
+        self._original = None
+        self.clear()
+        self.setText("Detection Snapshot\n\n[ No captured image ]")
+
+    def _render_snapshot(self):
+        if self._original is not None and self.width() > 4 and self.height() > 4:
+            self.setPixmap(self._original.scaled(
+                self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+            ))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._render_snapshot()
 
 
 class HazardDetails(QFrame):
@@ -93,10 +127,8 @@ class HazardDetails(QFrame):
             drone_shots
         )
 
-        self.drone_photo = QLabel(
-            "Detection Snapshot\n\n"
-            "[ Drone image will appear here ]"
-        )
+        self.drone_photo = EvidencePhoto()
+        self.drone_photo.show_placeholder()
 
         self.drone_photo.setAlignment(
             Qt.AlignCenter
@@ -387,6 +419,19 @@ class HazardDetails(QFrame):
         )
 
         # =========================================================
+        # DETECTION SNAPSHOT (stored by the OperatorGUI)
+        # =========================================================
+
+        snapshot = (
+            Path.home() / ".local" / "share" / "fde_gui" /
+            "hazard_snapshots" / f"{hazard_id}.png"
+        )
+        if snapshot.is_file():
+            self.drone_photo.set_snapshot(snapshot)
+        else:
+            self.drone_photo.show_placeholder()
+
+        # =========================================================
         # NOTES
         # =========================================================
 
@@ -420,7 +465,7 @@ class HazardDetails(QFrame):
         # DETECTED
         # =========================================================
 
-        if status == "Detected":
+        if status == "Inconclusive":
 
             self.confirm_safe_action.show()
             self.confirm_hazard_action.show()
