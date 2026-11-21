@@ -1,0 +1,116 @@
+/* Scoped so the navigation tree keeps Doxygen's own type size. */
+#doc-content .contents {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0.25rem 1.4rem 3.5rem;
+  line-height: 1.55;
+}
+
+#doc-content .contents h1 {
+  margin-top: 2.4rem;
+  margin-bottom: 0.7rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 2px solid #d8dee4;
+  font-size: 1.45rem;
+  letter-spacing: -0.01em;
+}
+
+#doc-content .contents h2 {
+  margin-top: 1.6rem;
+  font-size: 1.12rem;
+}
+
+#doc-content .contents p,
+#doc-content .contents li {
+  max-width: 78ch;
+}
+
+#doc-content .contents li {
+  margin: 0.28rem 0;
+}
+
+.hero-lede {
+  font-size: 1.08rem;
+  line-height: 1.6;
+  color: #1f2328;
+  max-width: 78ch;
+}
+
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 1rem 0 0.4rem;
+}
+
+.stat {
+  flex: 1 1 140px;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  padding: 0.7rem 0.85rem 0.75rem;
+}
+
+.stat b {
+  display: block;
+  font-size: 1.15rem;
+  color: #0b3d91;
+  margin-bottom: 0.15rem;
+}
+
+.stat span {
+  display: block;
+  font-size: 0.82rem;
+  color: #57606a;
+  line-height: 1.35;
+}
+
+#doc-content .contents div.image {
+  display: block;
+  width: min(100%, 920px);
+  margin: 0.8rem 0 1.2rem;
+  text-align: center;
+}
+
+#doc-content .contents div.image img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid #d0d7de;
+  background: #fff;
+}
+
+#doc-content .contents div.caption {
+  font-size: 0.84rem;
+  color: #57606a;
+  margin-top: 0.35rem;
+}
+
+#doc-content table.markdownTable {
+  width: 100%;
+  font-size: 0.92rem;
+  border-collapse: collapse;
+}
+
+#doc-content table.markdownTable th {
+  background: #f6f8fa;
+}
+
+#doc-content .contents hr {
+  border: none;
+  border-top: 1px solid #eaeef2;
+  margin: 1.6rem 0;
+}
+
+#doc-content .contents .dotgraph,
+#doc-content .contents center {
+  margin: 0.8rem 0 1.2rem;
+  overflow-x: auto;
+}
+
+@media (max-width: 720px) {
+  #doc-content .contents div.image {
+    width: 100%;
+    margin: 0.4rem 0 0.9rem;
+  }
+}
